@@ -1,3 +1,7 @@
+# 0.6.3
+- Migrated default signaling server to Cloudflare Workers for zero server downtime, lower connection latency, and improved lobby reliability (hopefully).
+- Fixed signaling server resource limits and memory time usage bottlenecks.
+
 # 0.6.2
 - Added a config file for starting pre-configured dedicated servers. You can find this file (config.json) and more information about how it works in the README in /servers/dedicated.
 - Now shows the ping of every user connected in the player list.

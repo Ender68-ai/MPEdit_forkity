@@ -41,7 +41,7 @@ namespace mpedit {
 
     std::string P2PManager::getSignalingUrl() {
         auto url = Mod::get()->getSettingValue<std::string>("signaling-url");
-        if (url.empty()) return "https://dewy-flea-9364.d050.deno.net";
+        if (url.empty() || url == "https://dewy-flea-9364.d050.deno.net") return "https://multiplayer-edit.d050.workers.dev";
         return url;
     }
 

@@ -40,7 +40,7 @@
             "type": "string",
             "name": "Signaling Server URL",
             "description": "URL of the signaling server used for connection setup. Only change this if you're self-hosting your own signaling server.",
-            "default": "https://dewy-flea-9364.d050.deno.net",
+            "default": "https://multiplayer-edit.d050.workers.dev",
             "filter": "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:/.?&=-_"
         },
         "player-name": {
