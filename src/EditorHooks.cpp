@@ -20,6 +20,7 @@
 
 #include "ui/SessionStatusNode.hpp"
 #include "ui/CursorNode.hpp"
+#include "ui/CursorOverlayNode.hpp"
 #include "ui/UpdateHelperNode.hpp"
 
 using namespace geode::prelude;
@@ -636,6 +637,11 @@ class $modify(MPLevelEditorLayer, LevelEditorLayer) {
         auto* status = SessionStatusNode::create();
         status->setID("session-status"_spr);
         this->addChild(status, 1000);
+
+        auto* cursorOverlay = CursorOverlayNode::create();
+        cursorOverlay->setID("cursor-overlay-node"_spr);
+        int uiZ = this->m_editorUI ? this->m_editorUI->getZOrder() : 100;
+        this->addChild(cursorOverlay, uiZ > 2 ? uiZ - 1 : 10);
 
         auto* cursorNode = CursorNode::create();
         cursorNode->setID("cursor-node"_spr);

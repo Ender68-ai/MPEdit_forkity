@@ -8,7 +8,7 @@
     },
     "id": "d050.multiplayeredit",
     "name": "Multiplayer Edit",
-    "version": "v0.6.2",
+    "version": "v0.6.3",
     "developer": "d050",
     "description": "Collaborate with friends in real-time level editing! Host a session and build together.",
     "dependencies": {
@@ -59,6 +59,29 @@
             "name": "Show Player Cursors",
             "description": "Display other players' cursor positions in the editor.",
             "default": true
+        },
+        "show-offscreen-indicators": {
+            "type": "bool",
+            "name": "Off-Screen Indicators",
+            "description": "Show pointers at the screen edges for players who are off-screen.",
+            "default": true
+        },
+        "show-chat-bubbles": {
+            "type": "bool",
+            "name": "Show Chat Bubbles",
+            "description": "Display chat bubbles above players when they send messages.",
+            "default": true
+        },
+        "chat-bubble-duration": {
+            "type": "float",
+            "name": "Chat Bubble Duration",
+            "description": "How long (in seconds) chat bubbles stay visible.",
+            "default": 5.0,
+            "min": 1.0,
+            "max": 15.0,
+            "control": {
+                "slider": true
+            }
         },
         "show-notifications": {
             "type": "bool",

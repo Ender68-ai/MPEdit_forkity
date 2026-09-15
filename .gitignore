@@ -23,6 +23,7 @@ Thumbs.db
 
 servers/signaling/node_modules/
 servers/signaling/.env
+deno_proxy.js
 servers/dedicated/node_modules/
 servers/dedicated/saves/
 servers/dedicated/levels/

@@ -20,8 +20,6 @@ namespace mpedit {
             SimplePlayer* playtestIcon2 = nullptr;
             SimplePlayer* playtestInnerCube2 = nullptr;
             cocos2d::CCSprite* lockIcon = nullptr;
-            cocos2d::extension::CCScale9Sprite* chatBubble = nullptr;
-            cocos2d::CCLabelBMFont* chatLabel = nullptr;
             std::string lastStatus;
             float targetX = 0.f;
             float targetY = 0.f;
@@ -40,8 +38,6 @@ namespace mpedit {
         static CursorNode* create();
         
         static cocos2d::ccColor3B getColorForIndex(int index);
-
-        void showChatBubble(int playerId, std::string const& message);
     };
 
 } 

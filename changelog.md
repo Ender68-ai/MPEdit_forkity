@@ -1,6 +1,14 @@
 # 0.6.3
-- Migrated default signaling server to Cloudflare Workers for zero server downtime, lower connection latency, and improved lobby reliability (hopefully).
+- Changed default signaling server from deno deploy to cloudflare workers for zero server downtime, lower latency, and improved usage stats (hopefully).
 - Fixed signaling server resource limits and memory time usage bottlenecks.
+- Made it so that if the signaling server URL is empty, it uses the default URL.
+- Improved the look and design of the chat bubbles significantly.
+- Chat bubbles above player cursors now stack up to 3 messages when someone texts quickly.
+- Added off screen player indicators, so if someone is editing off screen, you can see a small arrow in their player color along the edge of your screen.
+- If someone chats while off screen, their screen edge indicator pulses so you know they sent a message.
+- Added mod settings to adjust how long chat bubbles stay on screen, or disable them completely.
+- Added a mod setting to toggle the off screen player indicators on or off.
+- Fixed "Show Player Cursors" mod setting not working properly.
 
 # 0.6.2
 - Added a config file for starting pre-configured dedicated servers. You can find this file (config.json) and more information about how it works in the README in /servers/dedicated.

@@ -40,8 +40,11 @@ namespace mpedit {
     }
 
     std::string P2PManager::getSignalingUrl() {
-        auto url = Mod::get()->getSettingValue<std::string>("signaling-url");
-        if (url.empty() || url == "https://dewy-flea-9364.d050.deno.net") return "https://multiplayer-edit.d050.workers.dev";
+        auto url = geode::utils::string::trim(Mod::get()->getSettingValue<std::string>("signaling-url"));
+        if (url.empty() || url == "https://" || url == "http://" || url.find('.') == std::string::npos || url == "https://dewy-flea-9364.d050.deno.net") {
+            return "https://multiplayer-edit.d050.workers.dev";
+        }
+        if (url.back() == '/') url.pop_back();
         return url;
     }
 
