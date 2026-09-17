@@ -1,8 +1,8 @@
 import { DurableObject } from "cloudflare:workers";
 
 const CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-const ROOM_TTL = 2 * 60 * 60 * 1000; // 2 hours max
-const STALE_PING_TTL = 5 * 60 * 1000; // 5 mins without ping = inactive
+const ROOM_TTL = 2 * 60 * 60 * 1000;
+const STALE_PING_TTL = 5 * 60 * 1000;
 
 function json(data, status = 200) {
     return new Response(JSON.stringify(data), {
@@ -25,7 +25,6 @@ export class SignalingHub extends DurableObject {
         this.waiters = new Map();
         this.lastSaveTime = 0;
 
-        // Restore rooms from durable storage on wake-up so lobbies survive idle hibernation
         this.ctx.blockConcurrencyWhile(async () => {
             try {
                 const stored = await this.ctx.storage.get("rooms");
@@ -153,7 +152,6 @@ export class SignalingHub extends DurableObject {
 
         this.cleanupStale();
 
-        // GET /rooms — Room browser list
         if (parts.length === 1 && req.method === "GET") {
             const now = Date.now();
             const list = [];
@@ -180,7 +178,6 @@ export class SignalingHub extends DurableObject {
             return json(list);
         }
 
-        // POST /rooms — Create room
         if (parts.length === 1 && req.method === "POST") {
             const body = await req.json().catch(() => ({}));
             const { hostName, playerName, roomName, description, playerLimit, isPrivate, hasPassword, password, version } = body;
@@ -213,7 +210,6 @@ export class SignalingHub extends DurableObject {
         const code = parts[1]?.toUpperCase();
         const action = parts[2];
 
-        // GET /rooms/:code — Room info
         if (parts.length === 2 && req.method === "GET") {
             const room = this.rooms.get(code);
             if (!room) return json({ error: "room not found" }, 404);
@@ -225,14 +221,12 @@ export class SignalingHub extends DurableObject {
             });
         }
 
-        // DELETE /rooms/:code — Close room
         if (parts.length === 2 && req.method === "DELETE") {
             this.deleteRoom(code);
             await this.saveRooms(true);
             return json({ ok: true });
         }
 
-        // POST /rooms/:code/join
         if (action === "join" && req.method === "POST") {
             const { playerName, password } = await req.json().catch(() => ({}));
             const room = this.rooms.get(code);
@@ -260,7 +254,6 @@ export class SignalingHub extends DurableObject {
             return json({ playerId, hostName: room.hostName });
         }
 
-        // POST /rooms/:code/ban
         if (action === "ban" && req.method === "POST") {
             const { playerName } = await req.json().catch(() => ({}));
             const room = this.rooms.get(code);
@@ -274,7 +267,6 @@ export class SignalingHub extends DurableObject {
             return json({ ok: true });
         }
 
-        // POST /rooms/:code/leave
         if (action === "leave" && req.method === "POST") {
             const { playerId } = await req.json().catch(() => ({}));
             const room = this.rooms.get(code);
@@ -285,7 +277,6 @@ export class SignalingHub extends DurableObject {
             return json({ ok: true });
         }
 
-        // GET /rooms/:code/signal — Long poll
         if (action === "signal" && req.method === "GET") {
             const role = url.searchParams.get("role");
             const playerId = Number(url.searchParams.get("playerId") || "0");
@@ -294,7 +285,7 @@ export class SignalingHub extends DurableObject {
             const room = this.rooms.get(code);
             if (role === "host" && room) {
                 room.lastPing = Date.now();
-                this.saveRooms(false); // throttled to at most once/min
+                this.saveRooms(false);
             }
 
             const initialMsgs = this.dequeue(code, queueName);
@@ -329,7 +320,6 @@ export class SignalingHub extends DurableObject {
             });
         }
 
-        // POST /rooms/:code/signal — Send signal message
         if (action === "signal" && req.method === "POST") {
             const msg = await req.json().catch(() => ({}));
             let targetQueue = "";
