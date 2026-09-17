@@ -133,6 +133,18 @@ export class SignalingHub extends DurableObject {
         const url = new URL(req.url);
         const parts = url.pathname.split("/").filter(Boolean);
 
+        if (parts.length === 0 && req.method === "GET") {
+            if (req.headers.get("accept")?.includes("application/json")) {
+                return json({ status: "ok", service: "multiplayer-edit-signaling" });
+            }
+            return new Response(LANDING_HTML, {
+                headers: {
+                    "Content-Type": "text/html; charset=utf-8",
+                    "Cache-Control": "no-cache",
+                },
+            });
+        }
+
         if (parts[0] === "health" && req.method === "GET") {
             return json({ status: "ok" });
         }
@@ -338,6 +350,72 @@ export class SignalingHub extends DurableObject {
         return json({ error: "not found" }, 404);
     }
 }
+
+const LANDING_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Multiplayer Edit Signaling Server</title>
+    <style>
+        body {
+            font-family: monospace;
+            background: #000;
+            color: #ccc;
+            padding: 20px;
+            margin: 0;
+            line-height: 1.6;
+        }
+        a { color: #66b3ff; }
+        a:hover { text-decoration: none; }
+        .val { color: #fff; }
+    </style>
+</head>
+<body>
+    <strong>Multiplayer Edit Signaling Server</strong><br><br>
+
+    URL: <span class="val">https://multiplayer-edit.d050.workers.dev</span><br>
+    Status: <span class="val" id="status">testing...</span><br>
+    Latency: <span class="val" id="latency">-</span><br>
+    Public Rooms: <span class="val" id="rooms">-</span><br><br>
+
+    <a href="https://github.com/xXoanon/MultiplayerEdit">github</a> | 
+    <a href="https://discord.gg/mdsuxYu2YP">discord</a>
+
+    <script>
+        function updatePing() {
+            const start = performance.now();
+            fetch("/health")
+                .then(res => {
+                    if (!res.ok) throw new Error();
+                    const ping = Math.round(performance.now() - start);
+                    document.getElementById("status").textContent = "ok";
+                    document.getElementById("latency").textContent = ping + "ms";
+                })
+                .catch(() => {
+                    document.getElementById("status").textContent = "unreachable";
+                    document.getElementById("latency").textContent = "err";
+                });
+        }
+
+        function updateRooms() {
+            fetch("/rooms")
+                .then(res => res.json())
+                .then(data => {
+                    if (Array.isArray(data)) {
+                        document.getElementById("rooms").textContent = data.length;
+                    }
+                })
+                .catch(() => {});
+        }
+
+        updatePing();
+        updateRooms();
+        setInterval(updatePing, 1000);
+        setInterval(updateRooms, 5000);
+    </script>
+</body>
+</html>`;
 
 export default {
     async fetch(request, env) {
