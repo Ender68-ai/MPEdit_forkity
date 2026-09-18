@@ -54,13 +54,13 @@ geode build --platform android64
 
 Multiplayer Edit supports two different types of servers:
 
-### 1. P2P Signaling Server (Deno Deploy)
-When players host a room in-game using a room code, the mod uses WebRTC to establish a direct Peer-to-Peer connection. To find each other, it uses a signaling server. By default, the mod connects to a free public signaling server I made (`https://dewy-flea-9364.d050.deno.net`), but you can host your own.
-See the [servers/signaling/README.md](https://github.com/Ender68-ai/Collab-Server/blob/main/servers/signaling/README.md) file for setup instructions. You can update the **Signaling Server URL** setting in the mod settings to use your custom server.
+### 1. P2P Signaling Server (Cloudflare Workers)
+When players host a room in-game using a room code, the mod uses WebRTC to establish a direct Peer-to-Peer connection. To find each other, it uses a signaling server. By default, the mod connects to a free public signaling server (`https://multiplayer-edit.d050.workers.dev`), but you can host your own.
+See the [servers/signaling/README.md](servers/signaling/README.md) file for setup instructions. You can update the **Signaling Server URL** setting in the mod settings to use your custom server.
 
 ### 2. Dedicated Servers (Node.js)
 You can run a standalone, headless server that hosts a level 24/7 without needing Geometry Dash open or even installed. Players connect directly to it using an IP address. 
-See the [servers/dedicated/README.md](https://github.com/Ender68-ai/Collab-Server/blob/main/servers/dedicated/README.md) file for setup and hosting instructions.
+See the [servers/dedicated/README.md](servers/dedicated/README.md) file for setup and hosting instructions.
 
 ## Support Development
 

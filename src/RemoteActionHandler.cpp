@@ -54,8 +54,11 @@ namespace mpedit {
             obj->getObjectRect();
             obj->calculateOrientedBox();
 
-            obj->updateStartValues();
-            obj->updateStartPos();
+            auto* editor = LevelEditorLayer::get();
+            if (!editor || editor->m_playbackMode == PlaybackMode::Not) {
+                obj->updateStartPos();
+                obj->updateStartValues();
+            }
         }
     }
 
@@ -688,13 +691,23 @@ namespace mpedit {
             editor->removeObjectFromSection(obj);
             
             auto pos = obj->getPosition();
+            
+            if (editor->m_playbackMode != PlaybackMode::Not) {
+                obj->m_startPosition = cocos2d::CCPoint{
+                    obj->m_startPosition.x + move.dx,
+                    obj->m_startPosition.y + move.dy
+                };
+            }
+            
             obj->setPosition({pos.x + move.dx, pos.y + move.dy});
             obj->dirtifyObjectRect();
             
             obj->getObjectRect();
             obj->calculateOrientedBox();
 
-            obj->updateStartPos();
+            if (editor->m_playbackMode == PlaybackMode::Not) {
+                obj->updateStartPos();
+            }
             editor->addToSection(obj);
             
             if (tpOrange) {
@@ -763,7 +776,11 @@ namespace mpedit {
 
             editor->removeObjectFromSection(obj);
             
-            obj->setPosition(cocos2d::CCPoint{r.x, r.y});
+            if (editor->m_playbackMode != PlaybackMode::Not) {
+                obj->m_startPosition = cocos2d::CCPoint{r.x, r.y};
+            } else {
+                obj->setPosition(cocos2d::CCPoint{r.x, r.y});
+            }
             
             applyTransformSafe(obj, r.rotation, r.scaleX, r.scaleY, r.flipX, r.flipY);
             
@@ -1206,9 +1223,20 @@ namespace mpedit {
                 auto* item = static_cast<UndoObject*>(itemObj);
                 
                 if (item->m_objects) {
-                    if (item->m_objects->containsObject(target)) {
-                        item->m_objects->removeObject(target);
+                    std::vector<cocos2d::CCObject*> innerToRemove;
+                    for (auto* innerObj : geode::cocos::CCArrayExt<cocos2d::CCObject*>(item->m_objects)) {
+                        if (innerObj == target) {
+                            innerToRemove.push_back(innerObj);
+                        } else if (auto* copy = geode::cast::typeinfo_cast<GameObjectCopy*>(innerObj)) {
+                            if (copy->m_object == target) {
+                                innerToRemove.push_back(innerObj);
+                            }
+                        }
                     }
+                    for (auto* innerObj : innerToRemove) {
+                        item->m_objects->removeObject(innerObj);
+                    }
+
                     if (item->m_objects->count() == 0) {
                         toRemove.push_back(item);
                         continue;

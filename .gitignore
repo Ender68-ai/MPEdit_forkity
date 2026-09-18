@@ -1,66 +1,36 @@
-# Prerequisites
-*.d
+geode-main/
 
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
-
-# Executables
-*.exe
-*.out
-*.app
-
-# Macos be like
-**/.DS_Store
-
-# Cache files for Sublime Text
-*.tmlanguage.cache
-*.tmPreferences.cache
-*.stTheme.cache
-
-# Ignore build folders
-**/build
-# Ignore platform specific build folders
-build-*/
-
-# Workspace files are user-specific
-*.sublime-workspace
-
-# ILY vscode
-**/.vscode
-
-# Local History for Visual Studio Code
-.history/
-
-# clangd
+build/
+build-win/
+cmake-build-*/
 .cache/
 
-# Visual Studio
-.vs/
-
-# CLion
+.vscode/
 .idea/
-/cmake-build-*/
+*.swp
+*.swo
+*~
 
-*/template
+.DS_Store
+Thumbs.db
+
+*.o
+*.obj
+*.dll
+*.so
+*.dylib
+*.geode
+
+servers/signaling/node_modules/
+servers/signaling/.env
+deno_proxy.js
+servers/dedicated/node_modules/
+servers/dedicated/saves/
+servers/dedicated/levels/
+
+geode docs/
+
+build-android32/
+build-android64/
+proxy-server/
+MultiplayerEdit-LEGACY-0.3.0/

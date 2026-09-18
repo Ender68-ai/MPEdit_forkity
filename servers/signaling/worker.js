@@ -1,63 +1,8 @@
+import { DurableObject } from "cloudflare:workers";
 
-const kv = await Deno.openKv();
-const ROOM_TTL = 2 * 60 * 60 * 1000;
 const CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-const lastPingCache = new Map();
-
-
-async function enqueueKv(code, queueName, msg) {
-    const msgId = Date.now() + "_" + crypto.randomUUID();
-    const wakeupKey = ["rooms", code, queueName, "wakeup"];
-    let atomic = kv.atomic();
-    atomic = atomic.set(["rooms", code, queueName, msgId], msg, { expireIn: ROOM_TTL });
-    atomic = atomic.set(wakeupKey, Date.now(), { expireIn: ROOM_TTL });
-    await atomic.commit();
-}
-
-async function dequeueKv(code, queueName) {
-    const prefix = ["rooms", code, queueName];
-    const msgs = [];
-    const entriesToDelete = [];
-
-    for await (const entry of kv.list({ prefix })) {
-        const lastKeyPart = entry.key[entry.key.length - 1];
-        if (lastKeyPart === "wakeup") continue;
-        msgs.push(entry.value);
-        entriesToDelete.push(entry);
-    }
-
-    if (msgs.length === 0) return [];
-
-    let atomic = kv.atomic();
-    let ops = 0;
-    for (const entry of entriesToDelete) {
-        atomic = atomic.check(entry).delete(entry.key);
-        ops++;
-        if (ops === 10) {
-            await atomic.commit();
-            atomic = kv.atomic();
-            ops = 0;
-        }
-    }
-    if (ops > 0) {
-        await atomic.commit();
-    }
-
-    return msgs;
-}
-
-async function genCode() {
-    let code;
-    let exists = true;
-    while (exists) {
-        code = Array.from({ length: 6 }, () =>
-            CHARS[Math.floor(Math.random() * CHARS.length)]
-        ).join("");
-        const res = await kv.get(["rooms", code]);
-        exists = !!res.value;
-    }
-    return code;
-}
+const ROOM_TTL = 2 * 60 * 60 * 1000;
+const STALE_PING_TTL = 5 * 60 * 1000;
 
 function json(data, status = 200) {
     return new Response(JSON.stringify(data), {
@@ -66,310 +11,406 @@ function json(data, status = 200) {
             "Content-Type": "application/json",
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type",
+            "Access-Control-Allow-Headers": "Content-Type, ngrok-skip-browser-warning, Bypass-Tunnel-Reminder",
         },
     });
 }
 
-Deno.serve(async (req) => {
-    if (req.method === "OPTIONS") return json({ ok: true });
+export class SignalingHub extends DurableObject {
+    constructor(ctx, env) {
+        super(ctx, env);
+        this.ctx = ctx;
+        this.rooms = new Map();
+        this.queues = new Map();
+        this.waiters = new Map();
+        this.lastSaveTime = 0;
 
-    const url = new URL(req.url);
-    const parts = url.pathname.split("/").filter(Boolean);
-
-    if (parts[0] === "health" && req.method === "GET") {
-        return json({ status: "ok" });
-    }
-
-    if (parts[0] !== "rooms") return json({ error: "not found" }, 404);
-
-    if (parts.length === 1 && req.method === "GET") {
-        const rooms = [];
-
-        for await (const entry of kv.list({ prefix: ["room_meta"] })) {
-            const room = entry.value;
-            if (!room.isPrivate && room.version && room.version !== "Unknown"
-                && room.lastPing && Date.now() - room.lastPing <= 3 * 60 * 1000) {
-                rooms.push({
-                    roomCode: entry.key[1],
-                    hostName: room.hostName,
-                    roomName: room.roomName || "Room",
-                    description: room.description || "",
-                    playerCount: room.players.length,
-                    playerLimit: room.playerLimit || 0,
-                    isPrivate: !!room.isPrivate,
-                    hasPassword: !!room.hasPassword,
-                    version: room.version || "Unknown",
-                    created: room.created || 0
-                });
+        this.ctx.blockConcurrencyWhile(async () => {
+            try {
+                const stored = await this.ctx.storage.get("rooms");
+                if (stored && typeof stored === "object") {
+                    this.rooms = new Map(Object.entries(stored));
+                }
+            } catch (err) {
+                console.error("Failed to restore rooms from storage:", err);
             }
-        }
-
-        rooms.sort((a, b) => b.created - a.created);
-        return json(rooms);
-    }
-
-    if (parts.length === 1 && req.method === "POST") {
-        const { hostName, playerName, roomName, description, playerLimit, isPrivate, hasPassword, password, version } = await req.json();
-        const code = await genCode();
-        const roomId = crypto.randomUUID();
-
-        const host = hostName || playerName || "Unknown";
-
-        const roomObj = {
-            roomId,
-            hostName: host,
-            roomName: roomName || "Room",
-            description: description || "",
-            playerLimit: playerLimit || 0,
-            isPrivate: !!isPrivate,
-            hasPassword: !!hasPassword,
-            password: password || "",
-            version: version || "Unknown",
-            nextId: 1,
-            created: Date.now(),
-            players: [{ id: 0, name: host }],
-            lastPing: Date.now(),
-        };
-
-        let atomic = kv.atomic();
-        atomic = atomic.set(["rooms", code], roomObj, { expireIn: 15 * 60 * 1000 });
-        atomic = atomic.set(["room_meta", code], roomObj, { expireIn: 15 * 60 * 1000 });
-        await atomic.commit();
-
-        return json({ roomCode: code, roomId });
-    }
-
-    const code = parts[1]?.toUpperCase();
-    const action = parts[2];
-
-    if (parts.length === 2 && req.method === "GET") {
-        const roomRes = await kv.get(["rooms", code]);
-        const room = roomRes.value;
-        if (!room) return json({ error: "room not found" }, 404);
-        return json({
-            roomCode: code,
-            hostName: room.hostName,
-            playerCount: room.players.length,
-            roomId: room.roomId,
         });
     }
 
-    if (parts.length === 2 && req.method === "DELETE") {
-        let atomic = kv.atomic();
-        atomic = atomic.delete(["rooms", code]);
-        atomic = atomic.delete(["room_meta", code]);
-        await atomic.commit();
-
-        return json({ ok: true });
+    async saveRooms(force = false) {
+        const now = Date.now();
+        if (!force && now - this.lastSaveTime < 60000) return;
+        this.lastSaveTime = now;
+        try {
+            const obj = Object.fromEntries(this.rooms);
+            await this.ctx.storage.put("rooms", obj);
+        } catch (err) {
+            console.error("Failed to persist rooms to storage:", err);
+        }
     }
 
-    if (action === "join" && req.method === "POST") {
-        const { playerName, password } = await req.json();
+    genCode() {
+        let code;
+        let exists = true;
+        while (exists) {
+            code = Array.from({ length: 6 }, () =>
+                CHARS[Math.floor(Math.random() * CHARS.length)]
+            ).join("");
+            exists = this.rooms.has(code);
+        }
+        return code;
+    }
 
-        let success = false;
-        let playerId = -1;
-        let retries = 5;
-        let hostName = "";
+    cleanupStale() {
+        const now = Date.now();
+        let changed = false;
+        for (const [code, room] of this.rooms.entries()) {
+            if (now - room.created > ROOM_TTL || (room.lastPing && now - room.lastPing > 10 * 60 * 1000)) {
+                this.deleteRoom(code);
+                changed = true;
+            }
+        }
+        if (changed) {
+            this.saveRooms(true);
+        }
+    }
 
-        while (!success && retries > 0) {
-            const currentRes = await kv.get(["rooms", code]);
-            const currentRoom = currentRes.value;
-            if (!currentRoom) return json({ error: "room not found" }, 404);
+    deleteRoom(code) {
+        this.rooms.delete(code);
+        for (const [key, waiters] of this.waiters.entries()) {
+            if (key.startsWith(code + ":")) {
+                for (const waiter of waiters) {
+                    clearTimeout(waiter.timer);
+                    waiter.resolve([]);
+                }
+                this.waiters.delete(key);
+            }
+        }
+        for (const key of this.queues.keys()) {
+            if (key.startsWith(code + ":")) {
+                this.queues.delete(key);
+            }
+        }
+    }
 
-            if (currentRoom.hasPassword && currentRoom.password !== password)
+    enqueue(code, queueName, msg) {
+        const key = `${code}:${queueName}`;
+        const activeWaiters = this.waiters.get(key);
+        if (activeWaiters && activeWaiters.length > 0) {
+            const waiter = activeWaiters.shift();
+            clearTimeout(waiter.timer);
+            if (activeWaiters.length === 0) {
+                this.waiters.delete(key);
+            }
+            waiter.resolve([msg]);
+            return;
+        }
+
+        if (!this.queues.has(key)) {
+            this.queues.set(key, []);
+        }
+        this.queues.get(key).push({
+            id: Date.now() + "_" + crypto.randomUUID(),
+            msg,
+            timestamp: Date.now(),
+        });
+    }
+
+    dequeue(code, queueName) {
+        const key = `${code}:${queueName}`;
+        const queue = this.queues.get(key);
+        if (!queue || queue.length === 0) return [];
+
+        const msgs = queue.map(entry => entry.msg);
+        this.queues.delete(key);
+        return msgs;
+    }
+
+    async fetch(req) {
+        if (req.method === "OPTIONS") return json({ ok: true });
+
+        const url = new URL(req.url);
+        const parts = url.pathname.split("/").filter(Boolean);
+
+        if (parts.length === 0 && req.method === "GET") {
+            if (req.headers.get("accept")?.includes("application/json")) {
+                return json({ status: "ok", service: "multiplayer-edit-signaling" });
+            }
+            return new Response(LANDING_HTML, {
+                headers: {
+                    "Content-Type": "text/html; charset=utf-8",
+                    "Cache-Control": "no-cache",
+                },
+            });
+        }
+
+        if (parts[0] === "health" && req.method === "GET") {
+            return json({ status: "ok" });
+        }
+
+        if (parts[0] !== "rooms") return json({ error: "not found" }, 404);
+
+        this.cleanupStale();
+
+        if (parts.length === 1 && req.method === "GET") {
+            const now = Date.now();
+            const list = [];
+
+            for (const [code, room] of this.rooms.entries()) {
+                if (!room.isPrivate && room.version && room.version !== "Unknown"
+                    && room.lastPing && now - room.lastPing <= STALE_PING_TTL) {
+                    list.push({
+                        roomCode: code,
+                        hostName: room.hostName,
+                        roomName: room.roomName || "Room",
+                        description: room.description || "",
+                        playerCount: room.players.length,
+                        playerLimit: room.playerLimit || 0,
+                        isPrivate: !!room.isPrivate,
+                        hasPassword: !!room.hasPassword,
+                        version: room.version || "Unknown",
+                        created: room.created || 0,
+                    });
+                }
+            }
+
+            list.sort((a, b) => b.created - a.created);
+            return json(list);
+        }
+
+        if (parts.length === 1 && req.method === "POST") {
+            const body = await req.json().catch(() => ({}));
+            const { hostName, playerName, roomName, description, playerLimit, isPrivate, hasPassword, password, version } = body;
+            const code = this.genCode();
+            const roomId = crypto.randomUUID();
+            const host = hostName || playerName || "Unknown";
+
+            const roomObj = {
+                roomId,
+                hostName: host,
+                roomName: roomName || "Room",
+                description: description || "",
+                playerLimit: playerLimit || 0,
+                isPrivate: !!isPrivate,
+                hasPassword: !!hasPassword,
+                password: password || "",
+                version: version || "Unknown",
+                nextId: 1,
+                created: Date.now(),
+                players: [{ id: 0, name: host }],
+                lastPing: Date.now(),
+                banned: [],
+            };
+
+            this.rooms.set(code, roomObj);
+            await this.saveRooms(true);
+            return json({ roomCode: code, roomId });
+        }
+
+        const code = parts[1]?.toUpperCase();
+        const action = parts[2];
+
+        if (parts.length === 2 && req.method === "GET") {
+            const room = this.rooms.get(code);
+            if (!room) return json({ error: "room not found" }, 404);
+            return json({
+                roomCode: code,
+                hostName: room.hostName,
+                playerCount: room.players.length,
+                roomId: room.roomId,
+            });
+        }
+
+        if (parts.length === 2 && req.method === "DELETE") {
+            this.deleteRoom(code);
+            await this.saveRooms(true);
+            return json({ ok: true });
+        }
+
+        if (action === "join" && req.method === "POST") {
+            const { playerName, password } = await req.json().catch(() => ({}));
+            const room = this.rooms.get(code);
+            if (!room) return json({ error: "room not found" }, 404);
+
+            if (room.hasPassword && room.password !== password) {
                 return json({ error: "invalid password" }, 403);
+            }
 
-            if (currentRoom.banned && currentRoom.banned.includes(playerName))
+            if (room.banned && room.banned.includes(playerName)) {
                 return json({ error: "you are banned" }, 403);
+            }
 
-            if (currentRoom.playerLimit > 0 && currentRoom.players.length >= currentRoom.playerLimit)
+            if (room.playerLimit > 0 && room.players.length >= room.playerLimit) {
                 return json({ error: "room full" }, 400);
-
-            hostName = currentRoom.hostName;
-            playerId = currentRoom.nextId++;
-            currentRoom.players.push({ id: playerId, name: playerName });
-
-            const commit = await kv
-                .atomic()
-                .check(currentRes)
-                .set(["rooms", code], currentRoom, { expireIn: 15 * 60 * 1000 })
-                .set(["room_meta", code], currentRoom, { expireIn: 15 * 60 * 1000 })
-                .commit();
-
-            success = commit.ok;
-            retries--;
-        }
-
-        if (!success) return json({ error: "concurrent join failed" }, 500);
-
-        const joinMsg = { type: "client_joined", playerId, playerName };
-        await enqueueKv(code, "hostQueue", joinMsg);
-
-        return json({ playerId, hostName });
-    }
-
-    if (action === "ban" && req.method === "POST") {
-        const { playerName } = await req.json();
-
-        let success = false;
-        let retries = 5;
-
-        while (!success && retries > 0) {
-            const currentRes = await kv.get(["rooms", code]);
-            const currentRoom = currentRes.value;
-            if (!currentRoom) return json({ error: "room not found" }, 404);
-
-            if (!currentRoom.banned) currentRoom.banned = [];
-            if (!currentRoom.banned.includes(playerName)) {
-                currentRoom.banned.push(playerName);
             }
 
-            const commit = await kv
-                .atomic()
-                .check(currentRes)
-                .set(["rooms", code], currentRoom, { expireIn: 15 * 60 * 1000 })
-                .set(["room_meta", code], currentRoom, { expireIn: 15 * 60 * 1000 })
-                .commit();
+            const playerId = room.nextId++;
+            room.players.push({ id: playerId, name: playerName });
 
-            success = commit.ok;
-            retries--;
+            const joinMsg = { type: "client_joined", playerId, playerName };
+            this.enqueue(code, "hostQueue", joinMsg);
+            await this.saveRooms(true);
+
+            return json({ playerId, hostName: room.hostName });
         }
-        if (!success) return json({ error: "concurrent ban failed" }, 500);
-        return json({ ok: true });
-    }
 
-    if (action === "leave" && req.method === "POST") {
-        const { playerId } = await req.json();
+        if (action === "ban" && req.method === "POST") {
+            const { playerName } = await req.json().catch(() => ({}));
+            const room = this.rooms.get(code);
+            if (!room) return json({ error: "room not found" }, 404);
 
-        let success = false;
-        let retries = 5;
-
-        while (!success && retries > 0) {
-            const currentRes = await kv.get(["rooms", code]);
-            const currentRoom = currentRes.value;
-            if (!currentRoom) return json({ error: "room not found" }, 404);
-
-            currentRoom.players = currentRoom.players.filter(p => p.id !== playerId);
-
-            const commit = await kv
-                .atomic()
-                .check(currentRes)
-                .set(["rooms", code], currentRoom, { expireIn: 15 * 60 * 1000 })
-                .set(["room_meta", code], currentRoom, { expireIn: 15 * 60 * 1000 })
-                .commit();
-
-            success = commit.ok;
-            retries--;
-        }
-        return json({ ok: success });
-    }
-
-    if (action === "signal" && req.method === "GET") {
-        const role = url.searchParams.get("role");
-        const playerId = Number(url.searchParams.get("playerId") || "0");
-        const queueName = role === "host" ? "hostQueue" : `clientQueue_${playerId}`;
-        const target = role === "host" ? "host" : playerId;
-
-        if (role === "host") {
-            const cachedPing = lastPingCache.get(code) || 0;
-            if (Date.now() - cachedPing >= 120000) {
-                let success = false;
-                let retries = 3;
-                while (!success && retries > 0) {
-                    const currentRes = await kv.get(["rooms", code]);
-                    if (!currentRes.value) break;
-                    currentRes.value.lastPing = Date.now();
-                    const commit = await kv.atomic()
-                        .check(currentRes)
-                        .set(["rooms", code], currentRes.value, { expireIn: 15 * 60 * 1000 })
-                        .set(["room_meta", code], currentRes.value, { expireIn: 15 * 60 * 1000 })
-                        .commit();
-                    success = commit.ok;
-                    retries--;
-                }
-                lastPingCache.set(code, Date.now());
+            if (!room.banned) room.banned = [];
+            if (!room.banned.includes(playerName)) {
+                room.banned.push(playerName);
+                await this.saveRooms(true);
             }
+            return json({ ok: true });
         }
 
-        const initialMsgs = await dequeueKv(code, queueName);
-        if (initialMsgs.length > 0) return json(initialMsgs);
+        if (action === "leave" && req.method === "POST") {
+            const { playerId } = await req.json().catch(() => ({}));
+            const room = this.rooms.get(code);
+            if (!room) return json({ error: "room not found" }, 404);
 
-        const timeoutParam = Number(url.searchParams.get("timeout") || "0");
-        let actualTimeout;
-        if (timeoutParam <= 0) {
-            actualTimeout = 1000;
-        } else {
-            actualTimeout = Math.min(timeoutParam, 30000);
+            room.players = room.players.filter(p => p.id !== playerId);
+            await this.saveRooms(true);
+            return json({ ok: true });
         }
 
-        const stream = kv.watch([["rooms", code, queueName, "wakeup"]]);
-        const reader = stream.getReader();
+        if (action === "signal" && req.method === "GET") {
+            const role = url.searchParams.get("role");
+            const playerId = Number(url.searchParams.get("playerId") || "0");
+            const queueName = role === "host" ? "hostQueue" : `clientQueue_${playerId}`;
 
-        return new Promise((resolve) => {
-            let isResolved = false;
+            const room = this.rooms.get(code);
+            if (role === "host" && room) {
+                room.lastPing = Date.now();
+                this.saveRooms(false);
+            }
 
-            const timer = setTimeout(async () => {
-                if (isResolved) return;
-                isResolved = true;
-                try { await reader.cancel(); } catch (_) {}
-                resolve(json([]));
-            }, actualTimeout);
+            const initialMsgs = this.dequeue(code, queueName);
+            if (initialMsgs.length > 0) return json(initialMsgs);
 
-            (async () => {
-                try {
-                    let isFirst = true;
-                    while (true) {
-                        const { done } = await reader.read();
-                        if (done || isResolved) break;
-                        if (isFirst) {
-                            isFirst = false;
-                            continue;
-                        }
-                        
-                        const msgs = await dequeueKv(code, queueName);
-                        if (msgs.length > 0) {
-                            if (!isResolved) {
-                                isResolved = true;
-                                clearTimeout(timer);
-                                try { await reader.cancel(); } catch (_) {}
-                                resolve(json(msgs));
-                            }
-                            break;
-                        }
-                    }
-                } catch (_) {
-                    if (!isResolved) {
-                        isResolved = true;
-                        clearTimeout(timer);
-                        try { await reader.cancel(); } catch (_) {}
-                        resolve(json([]));
-                    }
+            const timeoutParam = Number(url.searchParams.get("timeout") || "0");
+            const requestedTimeout = timeoutParam > 0 ? timeoutParam : 1000;
+            const actualTimeout = Math.min(requestedTimeout, 1500);
+
+            return new Promise((resolve) => {
+                const key = `${code}:${queueName}`;
+                if (!this.waiters.has(key)) {
+                    this.waiters.set(key, []);
                 }
-            })();
-        });
-    }
 
-    if (action === "signal" && req.method === "POST") {
-        const msg = await req.json();
-        let targetQueue = "";
-        let targetWake = null;
+                const waiter = {
+                    resolve: (msgs) => resolve(json(msgs)),
+                    timer: null,
+                };
 
-        if (msg.type === "offer" || (msg.type === "candidate" && msg.targetPlayerId !== undefined)) {
-            targetQueue = `clientQueue_${msg.targetPlayerId}`;
-            targetWake = msg.targetPlayerId;
-        } else if (msg.type === "answer" || (msg.type === "candidate" && msg.playerId !== undefined)) {
-            targetQueue = "hostQueue";
-            targetWake = "host";
+                waiter.timer = setTimeout(() => {
+                    const activeWaiters = this.waiters.get(key);
+                    if (activeWaiters) {
+                        const idx = activeWaiters.indexOf(waiter);
+                        if (idx !== -1) activeWaiters.splice(idx, 1);
+                        if (activeWaiters.length === 0) this.waiters.delete(key);
+                    }
+                    resolve(json([]));
+                }, actualTimeout);
+
+                this.waiters.get(key).push(waiter);
+            });
         }
 
-        if (targetQueue) {
-            await enqueueKv(code, targetQueue, msg);
+        if (action === "signal" && req.method === "POST") {
+            const msg = await req.json().catch(() => ({}));
+            let targetQueue = "";
+
+            if (msg.type === "offer" || (msg.type === "candidate" && msg.targetPlayerId !== undefined)) {
+                targetQueue = `clientQueue_${msg.targetPlayerId}`;
+            } else if (msg.type === "answer" || (msg.type === "candidate" && msg.playerId !== undefined)) {
+                targetQueue = "hostQueue";
+            }
+
+            if (targetQueue) {
+                this.enqueue(code, targetQueue, msg);
+            }
+
+            return json({ ok: true });
         }
 
-        return json({ ok: true });
+        return json({ error: "not found" }, 404);
     }
+}
 
-    return json({ error: "not found" }, 404);
-});
+const LANDING_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Multiplayer Edit Signaling Server</title>
+    <style>
+        body {
+            font-family: monospace;
+            background: #000;
+            color: #ccc;
+            padding: 20px;
+            margin: 0;
+            line-height: 1.6;
+        }
+        a { color: #66b3ff; }
+        a:hover { text-decoration: none; }
+        .val { color: #fff; }
+    </style>
+</head>
+<body>
+    <strong>Multiplayer Edit Signaling Server</strong><br><br>
 
+    URL: <span class="val">https://multiplayer-edit.d050.workers.dev</span><br>
+    Status: <span class="val" id="status">testing...</span><br>
+    Latency: <span class="val" id="latency">-</span><br>
+    Public Rooms: <span class="val" id="rooms">-</span><br><br>
+
+    <a href="https://github.com/xXoanon/MultiplayerEdit">github</a> | 
+    <a href="https://discord.gg/mdsuxYu2YP">discord</a>
+
+    <script>
+        function updatePing() {
+            const start = performance.now();
+            fetch("/health")
+                .then(res => {
+                    if (!res.ok) throw new Error();
+                    const ping = Math.round(performance.now() - start);
+                    document.getElementById("status").textContent = "ok";
+                    document.getElementById("latency").textContent = ping + "ms";
+                })
+                .catch(() => {
+                    document.getElementById("status").textContent = "unreachable";
+                    document.getElementById("latency").textContent = "err";
+                });
+        }
+
+        function updateRooms() {
+            fetch("/rooms")
+                .then(res => res.json())
+                .then(data => {
+                    if (Array.isArray(data)) {
+                        document.getElementById("rooms").textContent = data.length;
+                    }
+                })
+                .catch(() => {});
+        }
+
+        updatePing();
+        updateRooms();
+        setInterval(updatePing, 1000);
+        setInterval(updateRooms, 5000);
+    </script>
+</body>
+</html>`;
+
+export default {
+    async fetch(request, env) {
+        const id = env.SIGNALING_HUB.idFromName("global_signaling_hub");
+        const stub = env.SIGNALING_HUB.get(id);
+        return stub.fetch(request);
+    },
+};

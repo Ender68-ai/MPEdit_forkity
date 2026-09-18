@@ -39,9 +39,6 @@ namespace mpedit {
         
         m_selectionDrawNode = cocos2d::CCDrawNode::create();
         this->addChild(m_selectionDrawNode);
-        SessionManager::get().onChatMessage(this, [this](SessionManager::ChatMessage const& msg) {
-            this->showChatBubble(msg.playerId, msg.message);
-        });
 
         this->scheduleUpdate();
         return true;
@@ -60,9 +57,6 @@ namespace mpedit {
         if (!m_selectionDrawNode) {
             m_selectionDrawNode = cocos2d::CCDrawNode::create();
             this->addChild(m_selectionDrawNode);
-        SessionManager::get().onChatMessage(this, [this](SessionManager::ChatMessage const& msg) {
-            this->showChatBubble(msg.playerId, msg.message);
-        });
         }
 
         auto& players = session.getPlayers();
@@ -109,15 +103,6 @@ namespace mpedit {
 
                 pc.targetX = player.cursorX;
                 pc.targetY = player.cursorY;
-                pc.chatBubble = cocos2d::extension::CCScale9Sprite::create("square02_001.png");
-                pc.chatBubble->setContentSize({100.f, 30.f});
-                pc.chatBubble->setOpacity(0);
-                pc.chatBubble->setAnchorPoint({0.5f, 0.f});
-                this->addChild(pc.chatBubble, 20);
-                pc.chatLabel = CCLabelBMFont::create("", "chatFont.fnt");
-                pc.chatLabel->setScale(0.6f);
-                pc.chatLabel->setOpacity(0);
-                this->addChild(pc.chatLabel, 21);
 
                 pc.drawNode->setPosition({pc.targetX, pc.targetY});
                 pc.label->setPosition({pc.targetX + 15.f, pc.targetY - 15.f});
@@ -144,8 +129,6 @@ namespace mpedit {
             }
             
             pc.drawNode->setPosition({newX, newY});
-            if (pc.chatBubble) pc.chatBubble->setPosition({newX, newY + 20.f});
-            if (pc.chatLabel) pc.chatLabel->setPosition({newX, newY + 35.f});
 
             pc.label->setString(player.name.c_str());
 
@@ -263,6 +246,7 @@ namespace mpedit {
             float rotation = 0.f;
             bool isUpsideDown = false;
             bool isMini = false;
+            bool isFacingLeft = false;
             
             bool isDual = false;
             float p2X = 0.f;
@@ -271,6 +255,7 @@ namespace mpedit {
             bool p2UpsideDown = false;
             bool p2Mini = false;
             int p2IconType = 0;
+            bool p2IsFacingLeft = false;
             
             int cubeFrame = 1, shipFrame = 1, ballFrame = 1, ufoFrame = 1, waveFrame = 1, robotFrame = 1, spiderFrame = 1, swingFrame = 1;
             cocos2d::ccColor3B col1{255, 255, 255}, col2{255, 255, 255}, glowCol{0, 0, 0};
@@ -325,6 +310,11 @@ namespace mpedit {
                     p2Mini = (tokens[29] == "1");
                     p2IconType = geode::utils::numFromString<int>(tokens[30]).unwrapOr(0);
                 }
+                
+                if (tokens.size() >= 33) {
+                    isFacingLeft = (tokens[31] == "1");
+                    p2IsFacingLeft = (tokens[32] == "1");
+                }
             }
 
             if (isPlaytesting) {
@@ -336,6 +326,10 @@ namespace mpedit {
                 if (!pc.playtestIcon) {
                     pc.playtestIcon = SimplePlayer::create(1);
                     this->addChild(pc.playtestIcon);
+                    
+                    pc.playtestInnerCube = SimplePlayer::create(1);
+                    pc.playtestInnerCube->setScale(0.55f);
+                    pc.playtestIcon->addChild(pc.playtestInnerCube, -1);
                 }
                 
                 bool isLocal = (player.id == localId);
@@ -345,20 +339,24 @@ namespace mpedit {
                 pc.playtestIcon->setRotation(rotation);
                 
                 float baseScale = isMini ? 0.6f : 1.0f;
-                pc.playtestIcon->setScaleX(baseScale);
+                pc.playtestIcon->setScaleX(isFacingLeft ? -baseScale : baseScale);
                 pc.playtestIcon->setScaleY(isUpsideDown ? -baseScale : baseScale);
                 
                 if (isDual) {
                     if (!pc.playtestIcon2) {
                         pc.playtestIcon2 = SimplePlayer::create(1);
                         this->addChild(pc.playtestIcon2);
+                        
+                        pc.playtestInnerCube2 = SimplePlayer::create(1);
+                        pc.playtestInnerCube2->setScale(0.55f);
+                        pc.playtestIcon2->addChild(pc.playtestInnerCube2, -1);
                     }
                     pc.playtestIcon2->setVisible(!isLocal);
                     pc.playtestIcon2->setPosition({new2X, new2Y});
                     pc.playtestIcon2->setRotation(p2Rot);
                     
                     float p2BaseScale = p2Mini ? 0.6f : 1.0f;
-                    pc.playtestIcon2->setScaleX(p2BaseScale);
+                    pc.playtestIcon2->setScaleX(p2IsFacingLeft ? -p2BaseScale : p2BaseScale);
                     pc.playtestIcon2->setScaleY(p2UpsideDown ? -p2BaseScale : p2BaseScale);
                 } else if (pc.playtestIcon2) {
                     pc.playtestIcon2->setVisible(false);
@@ -401,6 +399,30 @@ namespace mpedit {
                     pc.playtestIcon->disableGlowOutline();
                 }
                 
+                if (pc.playtestInnerCube) {
+                    if (activeIconType == IconType::Ship || activeIconType == IconType::Ufo || activeIconType == IconType::Jetpack) {
+                        pc.playtestInnerCube->setVisible(!isLocal);
+                        pc.playtestInnerCube->updatePlayerFrame(cubeFrame, IconType::Cube);
+                        pc.playtestInnerCube->setColors(col1, col2);
+                        if (glowEnabled) {
+                            pc.playtestInnerCube->setGlowOutline(glowCol);
+                        } else {
+                            pc.playtestInnerCube->disableGlowOutline();
+                        }
+                        cocos2d::CCPoint offset = cocos2d::CCPoint(0.f, 0.f);
+                        if (activeIconType == IconType::Ship) {
+                            offset = cocos2d::CCPoint(0.f, 10.f);
+                        } else if (activeIconType == IconType::Ufo) {
+                            offset = cocos2d::CCPoint(0.f, 3.0f);
+                        } else if (activeIconType == IconType::Jetpack) {
+                            offset = cocos2d::CCPoint(6.f, 0.0f);
+                        }
+                        pc.playtestInnerCube->setPosition(pc.playtestIcon->getContentSize() / 2 + offset);
+                    } else {
+                        pc.playtestInnerCube->setVisible(false);
+                    }
+                }
+                
                 if (isDual && pc.playtestIcon2) {
                     int p2ActiveIconId = cubeFrame;
                     IconType p2ActiveIconType = IconType::Cube;
@@ -438,16 +460,42 @@ namespace mpedit {
                     } else {
                         pc.playtestIcon2->disableGlowOutline();
                     }
+                    
+                    if (pc.playtestInnerCube2) {
+                        if (p2ActiveIconType == IconType::Ship || p2ActiveIconType == IconType::Ufo || p2ActiveIconType == IconType::Jetpack) {
+                            pc.playtestInnerCube2->setVisible(!isLocal);
+                            pc.playtestInnerCube2->updatePlayerFrame(cubeFrame, IconType::Cube);
+                            pc.playtestInnerCube2->setColors(col2, col1);
+                            if (glowEnabled) {
+                                pc.playtestInnerCube2->setGlowOutline(glowCol);
+                            } else {
+                                pc.playtestInnerCube2->disableGlowOutline();
+                            }
+                            cocos2d::CCPoint offset2 = cocos2d::CCPoint(0.f, 0.f);
+                            if (p2ActiveIconType == IconType::Ship) {
+                                offset2 = cocos2d::CCPoint(0.f, 10.f);
+                            } else if (p2ActiveIconType == IconType::Ufo) {
+                                offset2 = cocos2d::CCPoint(0.f, 3.0f);
+                            } else if (p2ActiveIconType == IconType::Jetpack) {
+                                offset2 = cocos2d::CCPoint(6.f, 0.0f);
+                            }
+                            pc.playtestInnerCube2->setPosition(pc.playtestIcon2->getContentSize() / 2 + offset2);
+                        } else {
+                            pc.playtestInnerCube2->setVisible(false);
+                        }
+                    }
                 }
                 
                 pc.label->setAnchorPoint({0.5f, 0.f});
                 pc.label->setPosition({newX, newY + 20.f});
             } else {
                 bool isLocal = (player.id == localId);
-                pc.drawNode->setVisible(!isLocal);
-                pc.label->setVisible(!isLocal);
+                bool showCursors = geode::Mod::get()->getSettingValue<bool>("show-cursors");
+                bool isVisible = !isLocal && showCursors;
+                pc.drawNode->setVisible(isVisible);
+                pc.label->setVisible(isVisible);
                 if (pc.toolIndicator) {
-                    pc.toolIndicator->setVisible(!isLocal);
+                    pc.toolIndicator->setVisible(isVisible);
                 }
                 if (pc.playtestIcon) {
                     pc.playtestIcon->setVisible(false);
@@ -505,8 +553,6 @@ namespace mpedit {
                 if (it->second.toolIndicator) it->second.toolIndicator->removeFromParent();
                 if (it->second.playtestIcon) it->second.playtestIcon->removeFromParent();
                 if (it->second.playtestIcon2) it->second.playtestIcon2->removeFromParent();
-                if (it->second.chatBubble) it->second.chatBubble->removeFromParent();
-                if (it->second.chatLabel) it->second.chatLabel->removeFromParent();
                 if (it->second.lockIcon) it->second.lockIcon->removeFromParent();
 
                 it = m_cursors.erase(it);
@@ -514,39 +560,6 @@ namespace mpedit {
                 ++it;
             }
         }
-    }
-
-
-
-    void CursorNode::showChatBubble(int playerId, std::string const& message) {
-        auto it = m_cursors.find(playerId);
-        if (it == m_cursors.end()) return;
-        
-        auto& pc = it->second;
-        if (!pc.chatBubble || !pc.chatLabel) return;
-
-        pc.chatLabel->setString(message.c_str());
-        pc.chatLabel->limitLabelWidth(150.f, 0.6f, 0.2f);
-        
-        auto size = pc.chatLabel->getScaledContentSize();
-        pc.chatBubble->setContentSize({std::max(size.width + 20.f, 30.f), size.height + 15.f});
-
-        pc.chatBubble->stopAllActions();
-        pc.chatLabel->stopAllActions();
-
-        pc.chatBubble->runAction(cocos2d::CCSequence::create(
-            cocos2d::CCFadeTo::create(0.2f, 150),
-            cocos2d::CCDelayTime::create(6.0f),
-            cocos2d::CCFadeOut::create(0.5f),
-            nullptr
-        ));
-
-        pc.chatLabel->runAction(cocos2d::CCSequence::create(
-            cocos2d::CCFadeIn::create(0.2f),
-            cocos2d::CCDelayTime::create(6.0f),
-            cocos2d::CCFadeOut::create(0.5f),
-            nullptr
-        ));
     }
 
 }

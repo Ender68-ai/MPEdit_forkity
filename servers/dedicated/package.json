@@ -1,0 +1,25 @@
+{
+    "name": "multiplayer-edit-server",
+    "version": "1.0.0",
+    "description": "Dedicated server for Multiplayer Edit (Geometry Dash mod)",
+    "main": "server.js",
+    "bin": {
+        "multiplayer-edit-server": "./server.js"
+    },
+    "scripts": {
+        "start": "node server.js"
+    },
+    "dependencies": {
+        "@aws-sdk/client-s3": "^3.1127.0",
+        "prompts": "^2.4.2",
+        "ws": "^8.18.0"
+    },
+    "keywords": [
+        "geometry-dash",
+        "multiplayer",
+        "editor",
+        "geode"
+    ],
+    "author": "d050",
+    "license": "MIT"
+}

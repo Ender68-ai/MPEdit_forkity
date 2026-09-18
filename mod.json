@@ -1,35 +1,35 @@
 {
-    "geode": "5.9.0",
+    "geode": "5.10.1",
     "gd": {
         "win": "2.2081",
         "android": "2.2081",
         "mac": "2.2081",
         "ios": "2.2081"
     },
-    "id": "ender68.multiplayeredit",
+    "id": "d050.multiplayeredit",
     "name": "Multiplayer Edit",
-    "version": "v0.6.1",
+    "version": "v0.6.3",
     "developer": "d050",
-    "description": "Collaborate with friends in real-time level editing.",
+    "description": "Collaborate with friends in real-time level editing! Host a session and build together.",
     "dependencies": {
-        "geode.node-ids": ">=v1.21.0",
-        "alphalaneous.alphas_geode_utils": ">=v1.2.5"
+        "geode.node-ids": ">=1.0.0"
     },
     "tags": [
-        "editor", "online", "enhancement", "interface"
+        "editor",
+        "online",
+        "enhancement",
+        "utility",
+        "interface",
+        "content"
     ],
-    "resources": {
-        "sprites": [
-            "resources/backbtn.png",
-            "resources/button.png",
-            "resources/button2.png",
-            "resources/crosshair.png",
-            "resources/cursor.png",
-            "resources/settingsbtn.png",
-            "resources/online.png",
-            "resources/offline.png",
-            "resources/webspr.png"
-        ]
+    "links": {
+        "community": "https://discord.gg/mdsuxYu2YP",
+        "source": "https://github.com/xXoanon/MultiplayerEdit",
+        "homepage": "https://d050.vercel.app/"
+    },
+    "issues": {
+        "info": "Please report any bugs or crashes on the GitHub issues page.",
+        "url": "https://github.com/xXoanon/MultiplayerEdit/issues"
     },
     "settings": {
         "connection-section": {
@@ -40,7 +40,7 @@
             "type": "string",
             "name": "Signaling Server URL",
             "description": "URL of the signaling server used for connection setup. Only change this if you're self-hosting your own signaling server.",
-            "default": "http://mpedit.duckdns.org",
+            "default": "https://multiplayer-edit.d050.workers.dev",
             "filter": "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:/.?&=-_"
         },
         "player-name": {
@@ -60,10 +60,39 @@
             "description": "Display other players' cursor positions in the editor.",
             "default": true
         },
+        "show-offscreen-indicators": {
+            "type": "bool",
+            "name": "Off-Screen Indicators",
+            "description": "Show pointers at the screen edges for players who are off-screen.",
+            "default": true
+        },
+        "show-chat-bubbles": {
+            "type": "bool",
+            "name": "Show Chat Bubbles",
+            "description": "Display chat bubbles above players when they send messages.",
+            "default": true
+        },
+        "chat-bubble-duration": {
+            "type": "float",
+            "name": "Chat Bubble Duration",
+            "description": "How long (in seconds) chat bubbles stay visible.",
+            "default": 5.0,
+            "min": 1.0,
+            "max": 15.0,
+            "control": {
+                "slider": true
+            }
+        },
         "show-notifications": {
             "type": "bool",
             "name": "Show Notifications",
             "description": "Show notifications when players join/leave.",
+            "default": true
+        },
+        "chat-filter": {
+            "type": "bool",
+            "name": "Chat Filter",
+            "description": "Filters profanity in lobby names and chat.",
             "default": true
         },
         "check-updates": {

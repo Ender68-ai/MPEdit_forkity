@@ -18,6 +18,7 @@
 
 #include "ui/SessionStatusNode.hpp"
 #include "ui/CursorNode.hpp"
+#include "ui/CursorOverlayNode.hpp"
 #include "ui/UpdateHelperNode.hpp"
 
 using namespace geode::prelude;
@@ -421,6 +422,11 @@ class $modify(MPLevelEditorLayer, LevelEditorLayer) {
         status->setID("session-status"_spr);
         this->addChild(status, 1000);
 
+        auto* cursorOverlay = CursorOverlayNode::create();
+        cursorOverlay->setID("cursor-overlay-node"_spr);
+        int uiZ = this->m_editorUI ? this->m_editorUI->getZOrder() : 100;
+        this->addChild(cursorOverlay, uiZ > 2 ? uiZ - 1 : 10);
+
         auto* cursorNode = CursorNode::create();
         cursorNode->setID("cursor-node"_spr);
         this->m_objectLayer->addChild(cursorNode, 999);
@@ -567,8 +573,14 @@ class $modify(MPLevelEditorLayer, LevelEditorLayer) {
         auto* lastItem = static_cast<UndoObject*>(undoObjects->lastObject());
         if (lastItem) {
             if (lastItem->m_objects) {
-                for (auto* gObj : CCArrayExt<GameObject*>(lastItem->m_objects)) {
-                    affectedObjects.insert(gObj);
+                for (auto* innerObj : geode::cocos::CCArrayExt<cocos2d::CCObject*>(lastItem->m_objects)) {
+                    if (auto* gObj = geode::cast::typeinfo_cast<GameObject*>(innerObj)) {
+                        affectedObjects.insert(gObj);
+                    } else if (auto* copy = geode::cast::typeinfo_cast<GameObjectCopy*>(innerObj)) {
+                        if (copy->m_object) {
+                            affectedObjects.insert(copy->m_object);
+                        }
+                    }
                 }
             }
             if (lastItem->m_objectCopy && lastItem->m_objectCopy->m_object) {
@@ -772,6 +784,10 @@ class $modify(MPLevelEditorLayer, LevelEditorLayer) {
                     } else {
                         ss << ":0:0:0:0:0:0:0";
                     }
+                    
+                    ss << ":" << (this->m_player1->m_isGoingLeft ? 1 : 0);
+                    ss << ":" << (this->m_player2 && this->m_player2->m_isGoingLeft ? 1 : 0);
+                    
                     statusStr = ss.str();
                 } else {
 #ifdef GEODE_IS_MOBILE
