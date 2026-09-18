@@ -5,9 +5,9 @@
 #include "settings/settings.hpp"
 #include "CollabLayer.hpp"
 #include "SessionManager.hpp"
-#include "../utils/Panel.hpp"
-#include "../ui.hpp"
-#include "../menu/MultiplayerMenuPopup.hpp"
+#include "ui/utils/Panel.hpp"
+#include "ui/ui.hpp"
+#include "ui/menu/MultiplayerMenuPopup.hpp"
 
 
 using namespace geode::prelude;
@@ -47,7 +47,7 @@ bool CollabLayer::init() {
     this->addChild(background, -10);
 
 
-    auto backSprite = CCSprite::create("backbtn.png"_spr);
+    auto backSprite = CCSprite::create("../resources/backbtn.png"_spr);
     backSprite->setAnchorPoint({0.5f, 0.5f});
     backSprite->setScale(0.2f);
     backSprite->setRotation(270.0f);
@@ -59,7 +59,7 @@ bool CollabLayer::init() {
         menu_selector(CollabLayer::onBack)
     );
 
-    auto settingsSprite = CCSprite::create("settingsbtn.png"_spr);
+    auto settingsSprite = CCSprite::create("../resources/settingsbtn.png"_spr);
     settingsSprite->setAnchorPoint({0.5f, 0.5f});
     settingsSprite->setScale(0.25f);
     settingsSprite->setColor({ 250, 243, 243 });
@@ -145,10 +145,10 @@ bool CollabLayer::init() {
 
     bool isInSession = session.isInSession();
 
-    m_onlineSprite = CCSprite::create("online.png"_spr);
+    m_onlineSprite = CCSprite::create("../resources/online.png"_spr);
     m_onlineSprite->setScale(0.5f);
 
-    m_offlineSprite = CCSprite::create("offline.png"_spr);
+    m_offlineSprite = CCSprite::create("../resources/offline.png"_spr);
     m_offlineSprite->setScale(0.5f);
 
     
@@ -198,7 +198,7 @@ bool CollabLayer::init() {
         winSize.height * 0.8f
     });
 
-    auto webSpr = CCSprite::create("webspr.png"_spr);
+    auto webSpr = CCSprite::create("../resources/webspr.png"_spr);
     auto webBtn = CCMenuItemSpriteExtra::create(webSpr, this, menu_selector(CollabLayer::onWeb));
     webBtn->setPosition({
         winSize.width * 0.95f,

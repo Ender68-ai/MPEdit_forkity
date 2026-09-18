@@ -5,7 +5,6 @@
 
 #include "RoomCreateLayer.hpp"
 #include "SessionManager.hpp"
-#include "P2PManager.hpp"
 
 #ifdef _WIN32
     #include <windows.h>
@@ -35,12 +34,6 @@ bool RoomCreateLayer::init() {
         return false;
 
     auto& session = mpedit::SessionManager::get();
-    if (session.isInSession()) {
-        if (m_onRoomCreated) {
-            m_onRoomCreated();
-        }
-        return true;
-    }
 
     auto winSize = CCDirector::sharedDirector()->getWinSize();
 
@@ -300,6 +293,14 @@ bool RoomCreateLayer::init() {
         mpedit::SessionManager::get().getLocalPlayerId()
     );
     });
+
+    if (session.isInSession()) {
+        this->onSessionStarted(
+            session.getRoomCode(),
+            session.getLocalPlayerId()
+        );
+    }
+
     return true;
 }
 

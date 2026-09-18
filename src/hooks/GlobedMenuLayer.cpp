@@ -6,8 +6,6 @@
 
 #include <include/uibuilder/UIBuilder.hpp>
 #include <include/globed/GlobedMenuLayer.hpp>
-#include "ui/collablayer/CollabLayer.hpp"
-#include "ui/ui.hpp"
 
 
 using namespace cocos2d;
@@ -33,7 +31,7 @@ class $classModify(MyGlobedMenuLayer, globed::GlobedMenuLayer) {
     if (menu->getChildByID("collab-button"))
         return;
 
-    auto spr = CCSprite::create("button2.png"_spr);
+    auto spr = CCSprite::create("../resources/button2.png"_spr);
 
     auto btn = CCMenuItemSpriteExtra::create(
         spr,

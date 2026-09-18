@@ -16,9 +16,16 @@ if (WIN32)
 endif()
 
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS src/*.cpp)
+file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS src/include/*)
+file(GLOB_RECURSE RESOURCES CONFIGURE_DEPENDS resources/*)
 
-add_library(${PROJECT_NAME} SHARED ${SOURCES})
-target_include_directories(${PROJECT_NAME} PRIVATE src)
+add_library(${PROJECT_NAME} SHARED ${SOURCES} ${RESOURCES})
+target_include_directories(${PROJECT_NAME} PRIVATE
+    src
+    src/include
+    src/include/advancedlabel/include
+    src/include/cue/include
+)
 
 set(CMAKE_SKIP_INSTALL_RULES ON)
 
@@ -161,6 +168,7 @@ else()
 endif()
 
 set(CMAKE_SKIP_INSTALL_RULES OFF)
+
 
 add_subdirectory($ENV{GEODE_SDK} ${CMAKE_CURRENT_BINARY_DIR}/geode)
 

@@ -7,37 +7,33 @@ class $modify(MyLevelBrowserLayer, LevelBrowserLayer) {
     bool init(GJSearchObject* object) {
         if (!LevelBrowserLayer::init(object))
             return false;
-        if (UI::useGlobed())
-            return true;
 
         auto myLevelsMenu = this->getChildByID("my-levels-menu");
-            if (!myLevelsMenu)
-                return true;
+        if (!myLevelsMenu) {
+            log::info("my-levels-menu was not found");
+            return false;
+        }
 
-            float buttonScale = 0.4f; // adjustable size value
-            auto btnSprite = CCSprite::create("button2.png"_spr);
-            btnSprite->setScale(buttonScale);
+        auto btnSprite = CCSprite::create("button2.png"_spr);
+        if (!btnSprite) {
+            log::info("Could not load button2.png");
+            return false;
+        }
+        btnSprite->setScale(0.4f);
 
-            auto button = CCMenuItemSpriteExtra::create(
-                btnSprite,
-                this,
-                menu_selector(MyLevelBrowserLayer::onMyButton)
-            );
-            
+        auto button = CCMenuItemSpriteExtra::create(
+            btnSprite,
+            this,
+            menu_selector(MyLevelBrowserLayer::onMyButton)
+        );
+        auto menuPos = myLevelsMenu->getPosition();
+        button->setPosition({
+            menuPos.x - 5.f,
+            menuPos.y + 50.f
+        });
+        this->addChild(button);
 
-
-            auto menuPos = myLevelsMenu->getPosition();
-            button->setPosition({
-                menuPos.x - 5.f,
-                menuPos.y + 50.f
-            });
-
-
-            auto menu = dynamic_cast<CCMenu*>(myLevelsMenu);
-            if (menu) {
-                menu->addChild(button);
-            }
-            return true;
+        return true;
         }
         void onMyButton(CCObject* sender) {
         auto collabLayer = CollabLayer::create();
