@@ -210,13 +210,13 @@ namespace mpedit {
     std::string formatTimeSince(std::chrono::steady_clock::time_point tp) {
         auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - tp).count();
         if (elapsed < 60) {
-            return fmt::format("{}s ago", std::max(1L, elapsed));
+            return fmt::format("{}s ago", std::max<int64_t>(1, elapsed));
         }
-        long minutes = elapsed / 60;
+        int64_t minutes = elapsed / 60;
         if (minutes < 60) {
             return fmt::format("{}m ago", minutes);
         }
-        long hours = minutes / 60;
+        int64_t hours = minutes / 60;
         return fmt::format("{}h ago", hours);
     }
 

@@ -289,7 +289,7 @@ namespace mpedit {
     }
 
     bool RevertManager::revertPlayer(int playerId, std::optional<std::chrono::seconds> timeWindow) {
-        auto* editor = RemoteActionHandler::get().getEditorLayer();
+        auto* editor = LevelEditorLayer::get();
         if (!editor) return false;
 
         auto now = std::chrono::steady_clock::now();
@@ -393,7 +393,7 @@ namespace mpedit {
     }
 
     bool RevertManager::rollbackLevel(std::chrono::seconds timeWindow) {
-        auto* editor = RemoteActionHandler::get().getEditorLayer();
+        auto* editor = LevelEditorLayer::get();
         if (!editor) return false;
 
         auto cutoff = std::chrono::steady_clock::now() - timeWindow;
