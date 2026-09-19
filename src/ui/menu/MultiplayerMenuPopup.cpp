@@ -5,6 +5,7 @@
 #include "../core/BasePopup.hpp"
 #include "../UpdateHelperNode.hpp"
 #include <Geode/ui/TextInput.hpp>
+#include <Geode/ui/TextArea.hpp>
 #include <Geode/ui/BasedButtonSprite.hpp>
 #include <Geode/utils/web.hpp>
 #include "DedicatedServersPopup.hpp"
@@ -1957,15 +1958,135 @@ namespace mpedit {
         );
     }
 
-    void MultiplayerMenuPopup::onPatreon(CCObject*) {
-        createQuickPopup(
-            "Patreon",
-            "Support me on <cy>Patreon</c>?",
-            "Cancel", "Open",
-            [](auto, bool btn2) {
-                if (btn2) geode::utils::web::openLinkInBrowser("https://www.patreon.com/cw/d050/membership");
+    class PatreonPopup : public BasePopup {
+    protected:
+        bool m_canClose = false;
+        float m_timer = 0.f;
+        int m_lastSeconds = 5;
+        ButtonSprite* m_laterSpr = nullptr;
+        CCMenuItemSpriteExtra* m_laterBtn = nullptr;
+
+        bool init() {
+            if (!BasePopup::init(360.f, 210.f)) return false;
+
+            this->setTitle("Support the Mod");
+
+            auto centerNode = CCNode::create();
+            centerNode->setContentSize({320.f, 110.f});
+            centerNode->setPosition(this->fromTop(40.f));
+            centerNode->setAnchorPoint({0.5f, 1.0f});
+            m_mainLayer->addChild(centerNode);
+
+            auto centerBg = CCScale9Sprite::create("square02_small.png");
+            centerBg->setContentSize(centerNode->getContentSize());
+            centerBg->setPosition(centerNode->getContentSize() / 2.f);
+            centerBg->setOpacity(75);
+            centerNode->addChild(centerBg, -1);
+
+            auto textArea = SimpleTextArea::create(
+                "Multiplayer Edit relies on community funding for active development.\n"
+                "Without enough support on Patreon, development and servers will unfortunately have to stop.\n\n"
+                "Please consider supporting the project to keep it alive!",
+                "chatFont.fnt",
+                0.55f,
+                300.f
+            );
+            textArea->setAlignment(cocos2d::kCCTextAlignmentCenter);
+            textArea->setAnchorPoint({0.5f, 0.5f});
+            textArea->setPosition(centerNode->getContentSize() / 2.f);
+            centerNode->addChild(textArea);
+
+            auto btnMenu = CCMenu::create();
+            btnMenu->setContentSize({260.f, 35.f});
+            btnMenu->setPosition(this->fromBottom(25.f));
+            btnMenu->setAnchorPoint({0.5f, 0.5f});
+            btnMenu->setLayout(RowLayout::create()->setAxisAlignment(AxisAlignment::Center)->setGap(15.f));
+            m_mainLayer->addChild(btnMenu);
+
+            m_laterSpr = ButtonSprite::create("Wait (5)", "goldFont.fnt", "GJ_button_06.png", 0.8f);
+            m_laterBtn = CCMenuItemSpriteExtra::create(m_laterSpr, this, menu_selector(PatreonPopup::onClose));
+            m_laterBtn->setEnabled(false);
+            btnMenu->addChild(m_laterBtn);
+
+            auto patreonSpr = ButtonSprite::create("Patreon", "goldFont.fnt", "GJ_button_01.png", 0.8f);
+            auto patreonBtn = CCMenuItemSpriteExtra::create(patreonSpr, this, menu_selector(PatreonPopup::onPatreon));
+            btnMenu->addChild(patreonBtn);
+
+            btnMenu->updateLayout();
+
+            if (m_closeBtn) {
+                m_closeBtn->setVisible(false);
             }
-        );
+
+            this->scheduleUpdate();
+
+            return true;
+        }
+
+        void update(float dt) override {
+            m_timer += dt;
+            int remaining = 5 - static_cast<int>(m_timer);
+            if (remaining <= 0) {
+                m_canClose = true;
+                if (m_laterBtn) m_laterBtn->setEnabled(true);
+                if (m_laterSpr) m_laterSpr->setString("Later");
+                if (m_closeBtn) m_closeBtn->setVisible(true);
+                this->unscheduleUpdate();
+            } else if (remaining != m_lastSeconds) {
+                m_lastSeconds = remaining;
+                if (m_laterSpr) {
+                    m_laterSpr->setString(fmt::format("Wait ({})", remaining).c_str());
+                }
+            }
+        }
+
+        void onClose(CCObject* sender) override {
+            if (!m_canClose) return;
+            BasePopup::onClose(sender);
+        }
+
+        void keyBackClicked() override {
+            if (!m_canClose) return;
+            BasePopup::keyBackClicked();
+        }
+
+        void keyDown(cocos2d::enumKeyCodes key, double p1) override {
+            if (key == cocos2d::KEY_Escape && !m_canClose) return;
+            BasePopup::keyDown(key, p1);
+        }
+
+        void onPatreon(CCObject*) {
+            geode::utils::web::openLinkInBrowser("https://www.patreon.com/cw/d050/membership");
+            m_canClose = true;
+            this->onClose(nullptr);
+        }
+
+    public:
+        static PatreonPopup* create() {
+            auto ret = new PatreonPopup();
+            if (ret->init()) {
+                ret->autorelease();
+                return ret;
+            }
+            delete ret;
+            return nullptr;
+        }
+    };
+
+    void MultiplayerMenuPopup::showPatreonNoticeIfNeeded() {
+        static bool s_shown = false;
+        if (s_shown) return;
+        s_shown = true;
+
+        if (auto* popup = PatreonPopup::create()) {
+            popup->show();
+        }
+    }
+
+    void MultiplayerMenuPopup::onPatreon(CCObject*) {
+        if (auto* popup = PatreonPopup::create()) {
+            popup->show();
+        }
     }
 
     void MultiplayerMenuPopup::onCopyCode(CCObject*) {
@@ -2055,7 +2176,8 @@ namespace mpedit {
         "Adding 100,000 glow objects...",
         "Adding lag spikes...",
         "Contacting RobTop Games...",
-        "Adding fixed hitboxes..."
+        "Adding fixed hitboxes...",
+        "Support the mod on Patreon!"
     };
 
     void MultiplayerMenuPopup::createFlavorLabel(cocos2d::CCPoint const& pos) {
@@ -2083,7 +2205,7 @@ namespace mpedit {
         m_flavorLabel->runAction(cycleAction);
     }
 
-    void MultiplayerMenuPopup::cycleFlavorText(cocos2d::CCObject*) {
+    void MultiplayerMenuPopup::cycleFlavorText() {
         if (!m_flavorLabel) return;
         if (s_funnyLines.size() > 1) {
             size_t nextIdx = rand() % (s_funnyLines.size() - 1);

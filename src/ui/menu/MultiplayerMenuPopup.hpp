@@ -35,7 +35,7 @@ namespace mpedit {
         void setupRoomBrowser();
         void createLoadingView(std::string const& statusText);
         void createFlavorLabel(cocos2d::CCPoint const& pos);
-        void cycleFlavorText(cocos2d::CCObject* = nullptr);
+        void cycleFlavorText();
         void clearCenter();
 
         void onRefresh(cocos2d::CCObject*);
@@ -56,6 +56,7 @@ namespace mpedit {
     public:
         static inline MultiplayerMenuPopup* s_instance = nullptr;
         static MultiplayerMenuPopup* create();
+        static void showPatreonNoticeIfNeeded();
 
         void setupActiveSession();
 

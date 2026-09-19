@@ -131,7 +131,6 @@ class $modify(MPEditorPauseLayer, EditorPauseLayer) {
     }
 
     void onSaveLocal(CCObject* sender) {
-        // First, call original saveLevel to generate the level string properly
         EditorPauseLayer::saveLevel();
         auto* editor = LevelEditorLayer::get();
         if (editor && editor->m_level) {
@@ -157,6 +156,7 @@ class $modify(MPEditorPauseLayer, EditorPauseLayer) {
                 popup->show();
             }
         }
+        MultiplayerMenuPopup::showPatreonNoticeIfNeeded();
     }
 
     void onSave(CCObject* sender) {
@@ -209,7 +209,6 @@ class $modify(MPEditorPauseLayer, EditorPauseLayer) {
                 loadingCircle->setParentLayer(this);
                 loadingCircle->show();
 
-                // Keep this layer alive in case of rapid clicks, though loading circle blocks touches
                 this->retain(); 
                 RemoteActionHandler::get().sendSnapshotToServer([this, sender, loadingCircle]() {
                     loadingCircle->fadeAndRemove();
@@ -269,6 +268,7 @@ class $modify(MPLevelBrowserLayer, LevelBrowserLayer) {
 
     void onMultiplayer(CCObject*) {
         MultiplayerMenuPopup::create()->show();
+        MultiplayerMenuPopup::showPatreonNoticeIfNeeded();
     }
 };
 
