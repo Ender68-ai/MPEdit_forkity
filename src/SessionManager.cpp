@@ -199,12 +199,22 @@ namespace mpedit {
 
     void SessionManager::addDisconnectedPlayer(PlayerInfo const& player) {
         for (auto it = m_disconnectedPlayers.begin(); it != m_disconnectedPlayers.end(); ++it) {
-            if (it->player.id == player.id) {
+            if (it->player.id == player.id || it->player.name == player.name) {
                 m_disconnectedPlayers.erase(it);
                 break;
             }
         }
         m_disconnectedPlayers.push_back({player, std::chrono::steady_clock::now()});
+    }
+
+    void SessionManager::removeDisconnectedPlayer(std::string const& name) {
+        for (auto it = m_disconnectedPlayers.begin(); it != m_disconnectedPlayers.end(); ) {
+            if (it->player.name == name) {
+                it = m_disconnectedPlayers.erase(it);
+            } else {
+                ++it;
+            }
+        }
     }
 
     std::string formatTimeSince(std::chrono::steady_clock::time_point tp) {
@@ -304,7 +314,8 @@ namespace mpedit {
             m_role = (localPlayerId == 0) ? Role::Host : Role::Client;
 
             m_players.clear();
-        m_chatHistory.clear();
+            m_disconnectedPlayers.clear();
+            m_chatHistory.clear();
             PlayerInfo self;
             self.id = localPlayerId;
             self.name = m_localPlayerName;
@@ -320,6 +331,7 @@ namespace mpedit {
 
         net.onPeerConnected([this](int playerId, std::string const& name, int colorIndex, std::string const& iconStr) {
             std::string filteredName = ChatFilter::filter(name);
+            removeDisconnectedPlayer(filteredName);
             for (auto& p : m_players) {
                 if (p.id == playerId) {
                     p.name = filteredName;
@@ -361,6 +373,7 @@ namespace mpedit {
             auto msg = proto::deserializePlayerJoined(reader);
             if (msg.name.empty()) return;
             msg.name = ChatFilter::filter(msg.name);
+            removeDisconnectedPlayer(msg.name);
 
             for (auto& p : m_players) {
                 if (p.id == msg.playerId) {
@@ -498,7 +511,8 @@ namespace mpedit {
             auto nowMs = static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now().time_since_epoch()).count());
             uint32_t rtt = nowMs - ts;
-            this->setPlayerPing(this->m_localPlayerId, static_cast<int>(rtt));
+            this->setPlayerPing(0, static_cast<int>(rtt));
+            this->setPlayerPing(this->m_localPlayerId, 0);
             
             P2PManager::get().send(proto::serializePingUpdate(static_cast<uint32_t>(rtt)), ChannelType::Unreliable);
         });

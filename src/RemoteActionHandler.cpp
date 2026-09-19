@@ -1181,6 +1181,7 @@ namespace mpedit {
 
         geode::Notification::create("Level Synced!", geode::NotificationIcon::Success)->show();
 
+        RevertManager::get().captureBaseline();
         m_initialSyncCompleted = true;
         m_processingRemote = false;
         log::info("RemoteActionHandler: sync_level complete (final m_objects count = {})",

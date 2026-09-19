@@ -16,6 +16,8 @@ namespace mpedit {
         cocos2d::CCNode* m_centerNode = nullptr;
         cocos2d::CCNode* m_sessionUiNode = nullptr;
         cocos2d::CCLabelBMFont* m_statusLabel = nullptr;
+        cocos2d::CCLabelBMFont* m_flavorLabel = nullptr;
+        size_t m_currentFlavorIndex = 0;
         geode::ScrollLayer* m_scrollLayer = nullptr;
         
         CCMenuItemSpriteExtra* m_hostBtn = nullptr;
@@ -32,6 +34,8 @@ namespace mpedit {
         void setupMenus();
         void setupRoomBrowser();
         void createLoadingView(std::string const& statusText);
+        void createFlavorLabel(cocos2d::CCPoint const& pos);
+        void cycleFlavorText(cocos2d::CCObject* = nullptr);
         void clearCenter();
 
         void onRefresh(cocos2d::CCObject*);

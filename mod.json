@@ -101,6 +101,12 @@
             "description": "Automatically check for newer versions when opening the Multiplayer menu.",
             "default": true
         },
+        "funny-loading-messages": {
+            "type": "bool",
+            "name": "Funny Loading Messages",
+            "description": "Show flavor text while connecting to a host.",
+            "default": true
+        },
         "cloud-section": {
             "type": "title",
             "name": "Cloud Hosting"

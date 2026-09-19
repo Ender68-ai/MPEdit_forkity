@@ -546,6 +546,7 @@ class $modify(MPLevelEditorLayer, LevelEditorLayer) {
                 settings.songID = this->m_level->m_songID;
                 settings.levelLength = this->m_level->m_levelLength;
             }
+            RevertManager::get().onSettingsUpdated(session.getLocalPlayerId(), settings);
             auto data = proto::serializeUpdateSettings(settings);
             P2PManager::get().send(std::move(data), ChannelType::Reliable);
             log::info("EditorHooks: Broadcasted update_settings");
@@ -570,6 +571,7 @@ class $modify(MPLevelEditorLayer, LevelEditorLayer) {
 
         auto& handler = RemoteActionHandler::get();
         handler.clearMappings();
+        RevertManager::get().captureBaseline();
 
         SessionManager::get().onSessionStarted(this, [this]() {
             auto& session = SessionManager::get();
@@ -2153,6 +2155,7 @@ class $modify(MPColorSelectPopup, ColorSelectPopup) {
         if (m_colorAction) {
             int channelID = m_colorAction->m_colorID;
             auto data = colorActionToData(m_colorAction, channelID);
+            RevertManager::get().onColorChannelUpdated(session.getLocalPlayerId(), data);
             auto packet = proto::serializeUpdateColorChannel(data);
             P2PManager::get().send(std::move(packet), ChannelType::Reliable);
             log::info("Broadcasting granular UpdateColorChannel for channel {} from ColorSelectPopup", channelID);
@@ -2182,6 +2185,7 @@ class $modify(MPColorSelectLiveOverlay, ColorSelectLiveOverlay) {
         if (m_baseColorAction) {
             int channelID = m_baseColorAction->m_colorID;
             auto data = colorActionToData(m_baseColorAction, channelID);
+            RevertManager::get().onColorChannelUpdated(session.getLocalPlayerId(), data);
             auto packet = proto::serializeUpdateColorChannel(data);
             P2PManager::get().send(std::move(packet), ChannelType::Reliable);
         }
@@ -2189,6 +2193,7 @@ class $modify(MPColorSelectLiveOverlay, ColorSelectLiveOverlay) {
         if (m_detailColorAction) {
             int channelID = m_detailColorAction->m_colorID;
             auto data = colorActionToData(m_detailColorAction, channelID);
+            RevertManager::get().onColorChannelUpdated(session.getLocalPlayerId(), data);
             auto packet = proto::serializeUpdateColorChannel(data);
             P2PManager::get().send(std::move(packet), ChannelType::Reliable);
         }

@@ -139,6 +139,7 @@ namespace mpedit {
         static std::string getSignalingUrl();
 
         size_t getReliableBufferedAmount(int playerId);
+        std::string getConnectionType(int playerId);
 
     private:
         P2PManager();

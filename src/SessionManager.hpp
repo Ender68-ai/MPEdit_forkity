@@ -73,6 +73,7 @@ namespace mpedit {
         std::vector<PlayerInfo> const& getPlayers() const;
         std::vector<DisconnectedPlayerInfo> const& getDisconnectedPlayers() const;
         void addDisconnectedPlayer(PlayerInfo const& player);
+        void removeDisconnectedPlayer(std::string const& name);
         PlayerInfo const* getPlayer(int id) const;
         void updatePlayerCursor(int playerId, float x, float y, std::string const& status);
 

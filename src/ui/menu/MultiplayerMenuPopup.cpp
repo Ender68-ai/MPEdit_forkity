@@ -10,6 +10,9 @@
 #include "DedicatedServersPopup.hpp"
 #include "ChatPopup.hpp"
 #include "../../RevertManager.hpp"
+#include <Geode/binding/Slider.hpp>
+#include <Geode/binding/CCMenuItemToggler.hpp>
+#include <Geode/binding/SliderThumb.hpp>
 
 
 using namespace geode::prelude;
@@ -74,121 +77,262 @@ namespace mpedit {
     class RevertPlayerPopup : public BasePopup {
     protected:
         PlayerInfo m_player;
-        geode::TextInput* m_timeInput = nullptr;
+        bool m_isDisconnected = false;
+        Slider* m_slider = nullptr;
+        CCLabelBMFont* m_timeLabel = nullptr;
         CCLabelBMFont* m_previewLabel = nullptr;
-        bool m_allTime = true;
+        CCMenuItemToggler* m_kickToggle = nullptr;
+        CCMenuItemToggler* m_banToggle = nullptr;
+        std::chrono::steady_clock::time_point m_firstTime;
+        std::chrono::steady_clock::time_point m_lastTime;
+        float m_durationSeconds = 0.f;
 
-        bool init(PlayerInfo const& p) {
-            if (!BasePopup::init(260.f, 210.f)) return false;
+        bool init(PlayerInfo const& p, bool isDisconnected = false) {
+            if (!BasePopup::init(280.f, 250.f)) return false;
             m_player = p;
-            this->setTitle("Revert Changes");
+            m_isDisconnected = isDisconnected;
+            this->setTitle("Revert Player");
+
+            auto [fTime, lTime] = RevertManager::get().getPlayerTimeRange(m_player.name);
+            m_firstTime = fTime;
+            m_lastTime = lTime;
+            m_durationSeconds = std::chrono::duration_cast<std::chrono::milliseconds>(m_lastTime - m_firstTime).count() / 1000.f;
 
             auto layout = CCNode::create();
-            layout->setContentSize({240.f, 150.f});
-            layout->setPosition(this->center() + CCPoint{0.f, -10.f});
+            layout->setContentSize({260.f, 195.f});
+            layout->setPosition(this->center() + CCPoint{0.f, -12.f});
             layout->setAnchorPoint({0.5f, 0.5f});
             m_mainLayer->addChild(layout);
 
             auto nameLabel = CCLabelBMFont::create(fmt::format("Player: {}", m_player.name).c_str(), "goldFont.fnt");
             nameLabel->setScale(0.5f);
-            nameLabel->setPosition({120.f, 135.f});
+            nameLabel->setPosition({130.f, 182.f});
             layout->addChild(nameLabel);
 
-            auto modeMenu = CCMenu::create();
-            modeMenu->setContentSize({220.f, 30.f});
-            modeMenu->setPosition({120.f, 105.f});
-            modeMenu->setLayout(RowLayout::create()->setGap(10.f)->setAxisAlignment(AxisAlignment::Center));
-            layout->addChild(modeMenu);
+            m_slider = Slider::create(this, menu_selector(RevertPlayerPopup::onSlider), 0.8f);
+            m_slider->setPosition({130.f, 155.f});
+            layout->addChild(m_slider);
 
-            auto allBtnSpr = ButtonSprite::create("All Time", "goldFont.fnt", "GJ_button_01.png", 0.6f);
-            allBtnSpr->setScale(0.6f);
-            auto allBtn = CCMenuItemSpriteExtra::create(allBtnSpr, this, menu_selector(RevertPlayerPopup::onSelectAllTime));
-            modeMenu->addChild(allBtn);
+            m_timeLabel = CCLabelBMFont::create("Revert: All edits (All time)", "chatFont.fnt");
+            m_timeLabel->setScale(0.42f);
+            m_timeLabel->setPosition({130.f, 134.f});
+            layout->addChild(m_timeLabel);
 
-            auto minsBtnSpr = ButtonSprite::create("Last X Mins", "goldFont.fnt", "GJ_button_04.png", 0.6f);
-            minsBtnSpr->setScale(0.6f);
-            auto minsBtn = CCMenuItemSpriteExtra::create(minsBtnSpr, this, menu_selector(RevertPlayerPopup::onSelectMinutes));
-            modeMenu->addChild(minsBtn);
-            modeMenu->updateLayout();
+            auto presetMenu = CCMenu::create();
+            presetMenu->setContentSize({240.f, 20.f});
+            presetMenu->setPosition({130.f, 114.f});
+            presetMenu->setLayout(RowLayout::create()->setGap(5.f)->setAxisAlignment(AxisAlignment::Center));
+            layout->addChild(presetMenu);
 
-            m_timeInput = geode::TextInput::create(60.f, "Mins", "chatFont.fnt");
-            m_timeInput->setCommonFilter(geode::CommonFilter::Int);
-            m_timeInput->setString("5");
-            m_timeInput->setPosition({120.f, 75.f});
-            m_timeInput->setVisible(false);
-            m_timeInput->setCallback([this](std::string const&) {
-                this->updatePreview();
-            });
-            layout->addChild(m_timeInput);
+            struct PresetInfo { const char* label; int seconds; };
+            PresetInfo presets[] = {
+                {"All", -1},
+                {"30m", 1800},
+                {"15m", 900},
+                {"5m", 300},
+                {"1m", 60}
+            };
+
+            for (auto const& pr : presets) {
+                auto spr = ButtonSprite::create(pr.label, "goldFont.fnt", "GJ_button_04.png", 0.5f);
+                spr->setScale(0.45f);
+                auto btn = CCMenuItemSpriteExtra::create(spr, this, menu_selector(RevertPlayerPopup::onPreset));
+                btn->setUserData(reinterpret_cast<void*>(static_cast<intptr_t>(pr.seconds)));
+                presetMenu->addChild(btn);
+            }
+            presetMenu->updateLayout();
+
+            auto badgeBg = CCScale9Sprite::create("square02_small.png");
+            badgeBg->setContentSize({240.f, 30.f});
+            badgeBg->setInsetTop(6.f);
+            badgeBg->setInsetBottom(6.f);
+            badgeBg->setInsetLeft(6.f);
+            badgeBg->setInsetRight(6.f);
+            badgeBg->setPosition({130.f, 88.f});
+            badgeBg->setOpacity(90);
+            badgeBg->setColor({0, 0, 0});
+            layout->addChild(badgeBg);
 
             m_previewLabel = CCLabelBMFont::create("Loading...", "chatFont.fnt");
-            m_previewLabel->setScale(0.45f);
-            m_previewLabel->setPosition({120.f, 50.f});
+            m_previewLabel->setScale(0.40f);
+            m_previewLabel->setPosition({130.f, 88.f});
             layout->addChild(m_previewLabel);
 
+            auto optionsNode = CCNode::create();
+            optionsNode->setContentSize({240.f, 25.f});
+            optionsNode->setPosition({130.f, 56.f});
+            optionsNode->setAnchorPoint({0.5f, 0.5f});
+            layout->addChild(optionsNode);
+
+            if (!m_isDisconnected) {
+                auto kickMenu = CCMenu::create();
+                kickMenu->setPosition({55.f, 12.f});
+                m_kickToggle = CCMenuItemToggler::createWithStandardSprites(this, nullptr, 0.55f);
+                m_kickToggle->setPosition({0.f, 0.f});
+                kickMenu->addChild(m_kickToggle);
+
+                auto kickLabel = CCLabelBMFont::create("Kick", "chatFont.fnt");
+                kickLabel->setScale(0.45f);
+                kickLabel->setAnchorPoint({0.f, 0.5f});
+                kickLabel->setPosition({15.f, 0.f});
+                kickMenu->addChild(kickLabel);
+                optionsNode->addChild(kickMenu);
+
+                auto banMenu = CCMenu::create();
+                banMenu->setPosition({145.f, 12.f});
+                m_banToggle = CCMenuItemToggler::createWithStandardSprites(this, nullptr, 0.55f);
+                m_banToggle->setPosition({0.f, 0.f});
+                banMenu->addChild(m_banToggle);
+
+                auto banLabel = CCLabelBMFont::create("Ban", "chatFont.fnt");
+                banLabel->setScale(0.45f);
+                banLabel->setAnchorPoint({0.f, 0.5f});
+                banLabel->setPosition({15.f, 0.f});
+                banMenu->addChild(banLabel);
+                optionsNode->addChild(banMenu);
+            } else {
+                auto banMenu = CCMenu::create();
+                banMenu->setPosition({105.f, 12.f});
+                m_banToggle = CCMenuItemToggler::createWithStandardSprites(this, nullptr, 0.55f);
+                m_banToggle->setPosition({0.f, 0.f});
+                banMenu->addChild(m_banToggle);
+
+                auto banLabel = CCLabelBMFont::create("Ban", "chatFont.fnt");
+                banLabel->setScale(0.45f);
+                banLabel->setAnchorPoint({0.f, 0.5f});
+                banLabel->setPosition({15.f, 0.f});
+                banMenu->addChild(banLabel);
+                optionsNode->addChild(banMenu);
+            }
+
             auto confirmMenu = CCMenu::create();
-            confirmMenu->setPosition({120.f, 20.f});
+            confirmMenu->setPosition({130.f, 18.f});
             layout->addChild(confirmMenu);
 
-            auto revertSpr = ButtonSprite::create("Confirm Revert", "goldFont.fnt", "GJ_button_06.png", 0.7f);
-            revertSpr->setScale(0.65f);
+            auto revertSpr = ButtonSprite::create("Confirm Revert", "goldFont.fnt", "GJ_button_06.png", 0.65f);
+            revertSpr->setScale(0.6f);
             auto revertBtn = CCMenuItemSpriteExtra::create(revertSpr, this, menu_selector(RevertPlayerPopup::onConfirm));
             confirmMenu->addChild(revertBtn);
 
+            m_slider->setValue(0.0f);
             updatePreview();
+
+            geode::cocos::handleTouchPriority(this);
             return true;
         }
 
-        void onSelectAllTime(CCObject*) {
-            m_allTime = true;
-            if (m_timeInput) m_timeInput->setVisible(false);
+        std::optional<std::chrono::seconds> getTimeWindow() const {
+            if (!m_slider) return std::nullopt;
+            float val = m_slider->getValue();
+            if (val <= 0.001f || m_durationSeconds <= 0.001f) {
+                return std::nullopt;
+            }
+            float remaining = (1.0f - val) * m_durationSeconds;
+            int secs = std::max(1, static_cast<int>(remaining));
+            return std::chrono::seconds(secs);
+        }
+
+        void onSlider(CCObject*) {
             updatePreview();
         }
 
-        void onSelectMinutes(CCObject*) {
-            m_allTime = false;
-            if (m_timeInput) m_timeInput->setVisible(true);
+        void onPreset(CCObject* sender) {
+            auto btn = static_cast<CCNode*>(sender);
+            int secs = static_cast<int>(reinterpret_cast<intptr_t>(btn->getUserData()));
+            if (secs == -1 || m_durationSeconds <= 0.001f) {
+                m_slider->setValue(0.0f);
+            } else {
+                float fraction = static_cast<float>(secs) / m_durationSeconds;
+                float val = std::clamp(1.0f - fraction, 0.0f, 1.0f);
+                m_slider->setValue(val);
+            }
             updatePreview();
         }
 
         void updatePreview() {
-            std::optional<std::chrono::seconds> window = std::nullopt;
-            if (!m_allTime && m_timeInput) {
-                int mins = geode::utils::numFromString<int>(m_timeInput->getString()).unwrapOr(5);
-                mins = std::max(1, mins);
-                window = std::chrono::seconds(mins * 60);
+            if (!m_slider) return;
+            auto window = getTimeWindow();
+            if (!window.has_value()) {
+                m_timeLabel->setString("Revert: All edits (All time)");
+            } else {
+                auto secs = window.value().count();
+                if (secs < 60) {
+                    m_timeLabel->setString(fmt::format("Revert: Edits in last {}s", secs).c_str());
+                } else if (secs < 3600) {
+                    m_timeLabel->setString(fmt::format("Revert: Edits in last {}m", secs / 60).c_str());
+                } else {
+                    m_timeLabel->setString(fmt::format("Revert: Edits in last {}h {}m", secs / 3600, (secs % 3600) / 60).c_str());
+                }
             }
-            auto preview = RevertManager::get().getRevertPreview(m_player.id, window);
-            if (m_previewLabel) {
-                m_previewLabel->setString(
-                    fmt::format("Placed: {} | Deleted: {} | Modified: {}",
-                        preview.placedCount, preview.deletedCount, preview.modifiedCount
-                    ).c_str()
-                );
-            }
+
+            auto preview = RevertManager::get().getRevertPreview(m_player.name, window);
+            m_previewLabel->setString(
+                fmt::format("Placed: {} | Deleted: {} | Modified: {}",
+                    preview.placedCount, preview.deletedCount, preview.modifiedCount
+                ).c_str()
+            );
         }
 
         void onConfirm(CCObject*) {
-            std::optional<std::chrono::seconds> window = std::nullopt;
-            if (!m_allTime && m_timeInput) {
-                int mins = geode::utils::numFromString<int>(m_timeInput->getString()).unwrapOr(5);
-                mins = std::max(1, mins);
-                window = std::chrono::seconds(mins * 60);
+            auto window = getTimeWindow();
+            RevertManager::get().revertPlayer(m_player.name, window);
+
+            bool ban = m_banToggle && m_banToggle->isToggled();
+            bool kick = m_kickToggle && m_kickToggle->isToggled();
+
+            if (ban) {
+                std::vector<uint8_t> data;
+                data.push_back(static_cast<uint8_t>(proto::Opcode::BanPlayer));
+                proto::Writer writer;
+                writer.writeU32(m_player.id);
+                auto p = writer.data();
+                data.insert(data.end(), p.begin(), p.end());
+                P2PManager::get().send(data, ChannelType::Reliable);
+                P2PManager::get().banPlayer(m_player.name);
+
+                int id = m_player.id;
+                if (!m_isDisconnected && id != -1) {
+                    std::thread([id]() {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                        geode::queueInMainThread([id]() {
+                            P2PManager::get().disconnectPeer(id);
+                        });
+                    }).detach();
+                }
+            } else if (kick && !m_isDisconnected) {
+                std::vector<uint8_t> data;
+                data.push_back(static_cast<uint8_t>(proto::Opcode::KickPlayer));
+                proto::Writer writer;
+                writer.writeU32(m_player.id);
+                auto p = writer.data();
+                data.insert(data.end(), p.begin(), p.end());
+                P2PManager::get().send(data, ChannelType::Reliable);
+
+                int id = m_player.id;
+                if (id != -1) {
+                    std::thread([id]() {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                        geode::queueInMainThread([id]() {
+                            P2PManager::get().disconnectPeer(id);
+                        });
+                    }).detach();
+                }
             }
-            RevertManager::get().revertPlayer(m_player.id, window);
+
             geode::Notification::create(
                 fmt::format("Reverted changes by {}", m_player.name),
                 geode::NotificationIcon::Success
             )->show();
+
             this->setKeyboardEnabled(false);
             this->setTouchEnabled(false);
             this->removeFromParentAndCleanup(true);
         }
 
     public:
-        static RevertPlayerPopup* create(PlayerInfo const& p) {
+        static RevertPlayerPopup* create(PlayerInfo const& p, bool isDisconnected = false) {
             auto ret = new RevertPlayerPopup();
-            if (ret->init(p)) {
+            if (ret->init(p, isDisconnected)) {
                 ret->autorelease();
                 return ret;
             }
@@ -199,93 +343,490 @@ namespace mpedit {
 
     class RollbackPopup : public BasePopup {
     protected:
-        geode::TextInput* m_timeInput = nullptr;
+        size_t m_selectedBranchIndex = 0;
+        CCMenuItemSpriteExtra* m_prevBtn = nullptr;
+        CCMenuItemSpriteExtra* m_nextBtn = nullptr;
+        CCMenuItemSpriteExtra* m_deleteBtn = nullptr;
+        CCLabelBMFont* m_branchTitleLabel = nullptr;
+        CCLabelBMFont* m_branchSubLabel = nullptr;
+        CCScale9Sprite* m_diagramBg = nullptr;
+        CCDrawNode* m_branchDrawNode = nullptr;
+        CCNode* m_pillLabelsNode = nullptr;
+        CCMenu* m_pillMenu = nullptr;
+        Slider* m_slider = nullptr;
+        CCLabelBMFont* m_timeLabel = nullptr;
         CCLabelBMFont* m_previewLabel = nullptr;
-        int m_minutes = 5;
+        ButtonSprite* m_confirmSpr = nullptr;
+        CCMenuItemSpriteExtra* m_confirmBtn = nullptr;
+        std::chrono::steady_clock::time_point m_startTime;
+        std::chrono::steady_clock::time_point m_endTime;
+        float m_durationSeconds = 0.f;
 
         bool init() {
-            if (!BasePopup::init(260.f, 210.f)) return false;
-            this->setTitle("Rollback Level");
+            if (!BasePopup::init(300.f, 300.f)) return false;
+            this->setTitle("Level Timeline");
+
+            m_selectedBranchIndex = RevertManager::get().getActiveBranchIndex();
 
             auto layout = CCNode::create();
-            layout->setContentSize({240.f, 150.f});
+            layout->setContentSize({280.f, 250.f});
             layout->setPosition(this->center() + CCPoint{0.f, -10.f});
             layout->setAnchorPoint({0.5f, 0.5f});
             m_mainLayer->addChild(layout);
 
-            auto descLabel = CCLabelBMFont::create("Revert all changes across room:", "chatFont.fnt");
-            descLabel->setScale(0.45f);
-            descLabel->setPosition({120.f, 135.f});
-            layout->addChild(descLabel);
+            auto branchArrowMenu = CCMenu::create();
+            branchArrowMenu->setContentSize({280.f, 250.f});
+            branchArrowMenu->setPosition({0.f, 0.f});
+            branchArrowMenu->setAnchorPoint({0.f, 0.f});
+            layout->addChild(branchArrowMenu);
+
+            auto leftSpr = CCSprite::createWithSpriteFrameName("edit_leftBtn_001.png");
+            leftSpr->setScale(0.75f);
+            m_prevBtn = CCMenuItemSpriteExtra::create(leftSpr, this, menu_selector(RollbackPopup::onPrevBranch));
+            m_prevBtn->setPosition({20.f, 226.f});
+            branchArrowMenu->addChild(m_prevBtn);
+
+            auto rightSpr = CCSprite::createWithSpriteFrameName("edit_rightBtn_001.png");
+            rightSpr->setScale(0.75f);
+            m_nextBtn = CCMenuItemSpriteExtra::create(rightSpr, this, menu_selector(RollbackPopup::onNextBranch));
+            m_nextBtn->setPosition({260.f, 226.f});
+            branchArrowMenu->addChild(m_nextBtn);
+
+            auto delSpr = CCSprite::createWithSpriteFrameName("GJ_trashBtn_001.png");
+            delSpr->setScale(0.65f);
+            m_deleteBtn = CCMenuItemSpriteExtra::create(delSpr, this, menu_selector(RollbackPopup::onDeleteBranch));
+            m_deleteBtn->setPosition({234.f, 226.f});
+            branchArrowMenu->addChild(m_deleteBtn);
+
+            m_branchTitleLabel = CCLabelBMFont::create("Branch 1", "goldFont.fnt");
+            m_branchTitleLabel->setScale(0.38f);
+            m_branchTitleLabel->setPosition({140.f, 226.f});
+            layout->addChild(m_branchTitleLabel);
+
+            m_branchSubLabel = CCLabelBMFont::create("Main Timeline", "chatFont.fnt");
+            m_branchSubLabel->setScale(0.32f);
+            m_branchSubLabel->setColor({180, 200, 220});
+            m_branchSubLabel->setPosition({140.f, 210.f});
+            layout->addChild(m_branchSubLabel);
+
+            m_diagramBg = CCScale9Sprite::create("square02_small.png");
+            m_diagramBg->setContentSize({260.f, 64.f});
+            m_diagramBg->setInsetTop(6.f);
+            m_diagramBg->setInsetBottom(6.f);
+            m_diagramBg->setInsetLeft(6.f);
+            m_diagramBg->setInsetRight(6.f);
+            m_diagramBg->setPosition({140.f, 168.f});
+            m_diagramBg->setOpacity(110);
+            m_diagramBg->setColor({0, 0, 0});
+            layout->addChild(m_diagramBg);
+
+            m_branchDrawNode = CCDrawNode::create();
+            m_diagramBg->addChild(m_branchDrawNode, 0);
+
+            m_pillLabelsNode = CCNode::create();
+            m_diagramBg->addChild(m_pillLabelsNode, 1);
+
+            m_pillMenu = CCMenu::create();
+            m_pillMenu->setContentSize({260.f, 64.f});
+            m_pillMenu->setPosition({0.f, 0.f});
+            m_pillMenu->setAnchorPoint({0.f, 0.f});
+            m_diagramBg->addChild(m_pillMenu, 2);
+
+            m_slider = Slider::create(this, menu_selector(RollbackPopup::onSlider), 0.85f);
+            m_slider->setPosition({140.f, 122.f});
+            layout->addChild(m_slider);
+
+            m_timeLabel = CCLabelBMFont::create("Timeline: Now (Latest)", "goldFont.fnt");
+            m_timeLabel->setScale(0.40f);
+            m_timeLabel->setPosition({140.f, 102.f});
+            layout->addChild(m_timeLabel);
+
+            auto badgeBg = CCScale9Sprite::create("square02_small.png");
+            badgeBg->setContentSize({260.f, 30.f});
+            badgeBg->setInsetTop(6.f);
+            badgeBg->setInsetBottom(6.f);
+            badgeBg->setInsetLeft(6.f);
+            badgeBg->setInsetRight(6.f);
+            badgeBg->setPosition({140.f, 76.f});
+            badgeBg->setOpacity(90);
+            badgeBg->setColor({0, 0, 0});
+            layout->addChild(badgeBg);
+
+            m_previewLabel = CCLabelBMFont::create("Loading...", "chatFont.fnt");
+            m_previewLabel->setScale(0.36f);
+            m_previewLabel->setPosition({140.f, 76.f});
+            layout->addChild(m_previewLabel);
 
             auto presetMenu = CCMenu::create();
-            presetMenu->setContentSize({220.f, 25.f});
-            presetMenu->setPosition({120.f, 105.f});
-            presetMenu->setLayout(RowLayout::create()->setGap(6.f)->setAxisAlignment(AxisAlignment::Center));
+            presetMenu->setContentSize({260.f, 20.f});
+            presetMenu->setPosition({140.f, 46.f});
+            presetMenu->setLayout(RowLayout::create()->setGap(5.f)->setAxisAlignment(AxisAlignment::Center));
             layout->addChild(presetMenu);
 
-            for (int m : {1, 5, 15, 30}) {
-                auto spr = ButtonSprite::create(fmt::format("{}m", m).c_str(), "goldFont.fnt", "GJ_button_04.png", 0.6f);
-                spr->setScale(0.55f);
+            struct PresetInfo { const char* label; int seconds; };
+            PresetInfo presets[] = {
+                {"1m", 60},
+                {"5m", 300},
+                {"15m", 900},
+                {"30m", 1800},
+                {"All", -1},
+                {"Now", 0}
+            };
+
+            for (auto const& p : presets) {
+                auto spr = ButtonSprite::create(p.label, "goldFont.fnt", "GJ_button_04.png", 0.55f);
+                spr->setScale(0.5f);
                 auto btn = CCMenuItemSpriteExtra::create(spr, this, menu_selector(RollbackPopup::onPreset));
-                btn->setUserData(reinterpret_cast<void*>(static_cast<uintptr_t>(m)));
+                btn->setUserData(reinterpret_cast<void*>(static_cast<intptr_t>(p.seconds)));
                 presetMenu->addChild(btn);
             }
             presetMenu->updateLayout();
 
-            m_timeInput = geode::TextInput::create(70.f, "Mins", "chatFont.fnt");
-            m_timeInput->setCommonFilter(geode::CommonFilter::Int);
-            m_timeInput->setString("5");
-            m_timeInput->setPosition({120.f, 75.f});
-            m_timeInput->setCallback([this](std::string const& val) {
-                m_minutes = geode::utils::numFromString<int>(val).unwrapOr(5);
-                m_minutes = std::max(1, m_minutes);
-                this->updatePreview();
-            });
-            layout->addChild(m_timeInput);
-
-            m_previewLabel = CCLabelBMFont::create("Loading...", "chatFont.fnt");
-            m_previewLabel->setScale(0.45f);
-            m_previewLabel->setPosition({120.f, 48.f});
-            layout->addChild(m_previewLabel);
-
             auto confirmMenu = CCMenu::create();
-            confirmMenu->setPosition({120.f, 18.f});
+            confirmMenu->setPosition({140.f, 18.f});
             layout->addChild(confirmMenu);
 
-            auto rollbackSpr = ButtonSprite::create("Confirm Rollback", "goldFont.fnt", "GJ_button_06.png", 0.7f);
-            rollbackSpr->setScale(0.65f);
-            auto rollbackBtn = CCMenuItemSpriteExtra::create(rollbackSpr, this, menu_selector(RollbackPopup::onConfirm));
-            confirmMenu->addChild(rollbackBtn);
+            m_confirmSpr = ButtonSprite::create("Apply Rollback", "goldFont.fnt", "GJ_button_01.png", 0.7f);
+            m_confirmSpr->setScale(0.65f);
+            m_confirmBtn = CCMenuItemSpriteExtra::create(m_confirmSpr, this, menu_selector(RollbackPopup::onConfirm));
+            confirmMenu->addChild(m_confirmBtn);
+
+            updateBranchView();
+
+            geode::cocos::handleTouchPriority(this);
+            return true;
+        }
+
+        std::chrono::steady_clock::time_point getTargetTime() const {
+            if (m_durationSeconds <= 0.001f) return m_endTime;
+            float val = m_slider ? m_slider->getValue() : 1.0f;
+            if (val <= 0.001f) {
+                return m_startTime - std::chrono::milliseconds(500);
+            }
+            if (val >= 0.999f) {
+                return m_endTime + std::chrono::milliseconds(500);
+            }
+            int64_t ms = static_cast<int64_t>(val * m_durationSeconds * 1000.f);
+            return m_startTime + std::chrono::milliseconds(ms);
+        }
+
+        void onDeleteBranch(CCObject*) {
+            auto const& revert = RevertManager::get();
+            if (m_selectedBranchIndex >= revert.getBranchCount()) return;
+            if (m_selectedBranchIndex == revert.getActiveBranchIndex()) return;
+            if (revert.getBranchCount() <= 1) return;
+
+            auto info = revert.getBranchInfo(m_selectedBranchIndex);
+            size_t idx = m_selectedBranchIndex;
+
+            geode::createQuickPopup(
+                "Delete Branch",
+                fmt::format("Are you sure you want to delete <cr>{}</c>? This cannot be undone.", info.name),
+                "Cancel",
+                "Delete",
+                [this, idx](auto*, bool btn2) {
+                    if (btn2) {
+                        if (RevertManager::get().deleteBranch(idx)) {
+                            size_t count = RevertManager::get().getBranchCount();
+                            if (m_selectedBranchIndex >= count) {
+                                m_selectedBranchIndex = count - 1;
+                            }
+                            updateBranchView();
+                            drawDiagram();
+                            geode::Notification::create(
+                                "Branch deleted",
+                                geode::NotificationIcon::Success
+                            )->show();
+                        }
+                    }
+                }
+            );
+        }
+
+        void onSelectBranchPill(CCObject* sender) {
+            auto node = static_cast<CCNode*>(sender);
+            size_t idx = static_cast<size_t>(reinterpret_cast<intptr_t>(node->getUserData()));
+            if (idx < RevertManager::get().getBranchCount() && idx != m_selectedBranchIndex) {
+                m_selectedBranchIndex = idx;
+                updateBranchView();
+            }
+        }
+
+        void drawDiagram() {
+            if (!m_branchDrawNode) return;
+            m_branchDrawNode->clear();
+            if (m_pillLabelsNode) m_pillLabelsNode->removeAllChildren();
+            if (m_pillMenu) m_pillMenu->removeAllChildren();
+
+            auto const& revert = RevertManager::get();
+            size_t totalBranches = revert.getBranchCount();
+            if (totalBranches == 0) return;
+
+            auto [rootStart, rootEnd] = revert.getBranchTimeRange(0);
+            auto globalMin = rootStart;
+            auto globalMax = rootEnd;
+            for (size_t b = 0; b < totalBranches; ++b) {
+                auto [s, e] = revert.getBranchTimeRange(b);
+                if (e > globalMax) globalMax = e;
+                if (s < globalMin) globalMin = s;
+            }
+            float totalDurationSecs = std::chrono::duration_cast<std::chrono::milliseconds>(globalMax - globalMin).count() / 1000.f;
+            if (totalDurationSecs <= 0.001f) totalDurationSecs = 1.0f;
+
+            float startX = 46.f;
+            float endX = 244.f;
+
+            auto timeToX = [&](std::chrono::steady_clock::time_point tp) {
+                float elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(tp - globalMin).count() / 1000.f;
+                float ratio = std::clamp(elapsed / totalDurationSecs, 0.0f, 1.0f);
+                return startX + ratio * (endX - startX);
+            };
+
+            auto getLaneY = [&](size_t idx) {
+                if (totalBranches == 1) return 32.f;
+                float topY = 52.f;
+                float botY = 12.f;
+                float spacing = (topY - botY) / static_cast<float>(totalBranches - 1);
+                return topY - static_cast<float>(idx) * spacing;
+            };
+
+            cocos2d::ccColor4F selStroke = {0.35f, 0.95f, 0.35f, 1.0f};
+            cocos2d::ccColor4F selFill = {0.05f, 0.14f, 0.07f, 0.92f};
+            cocos2d::ccColor4F unselStroke = {0.30f, 0.42f, 0.55f, 0.70f};
+            cocos2d::ccColor4F unselFill = {0.06f, 0.07f, 0.10f, 0.85f};
+            cocos2d::ccColor4F forkDotColor = {1.0f, 0.82f, 0.20f, 1.0f};
+            cocos2d::ccColor4F white = {1.0f, 1.0f, 1.0f, 1.0f};
+
+            for (size_t i = 0; i < totalBranches; ++i) {
+                auto info = revert.getBranchInfo(i);
+                auto [sTime, eTime] = revert.getBranchTimeRange(i);
+                float y = getLaneY(i);
+                float headX = std::max(startX + 8.f, timeToX(eTime));
+                bool isSelected = (i == m_selectedBranchIndex);
+
+                float pillRadius = 6.0f;
+                float pillWidth = 26.f;
+                float halfSpan = (pillWidth - 2.f * pillRadius) * 0.5f;
+                float pillCenterX = 18.f;
+
+                auto stroke = isSelected ? selStroke : unselStroke;
+                auto fill = isSelected ? selFill : unselFill;
+
+                m_branchDrawNode->drawSegment({pillCenterX - halfSpan, y}, {pillCenterX + halfSpan, y}, pillRadius, stroke);
+                m_branchDrawNode->drawSegment({pillCenterX - halfSpan, y}, {pillCenterX + halfSpan, y}, pillRadius - 1.2f, fill);
+
+                auto lbl = CCLabelBMFont::create(fmt::format("B{}", i + 1).c_str(), "chatFont.fnt");
+                lbl->setScale(0.24f);
+                lbl->setPosition({pillCenterX, y});
+                lbl->setColor(isSelected ? cocos2d::ccColor3B{120, 255, 120} : cocos2d::ccColor3B{140, 160, 180});
+                m_pillLabelsNode->addChild(lbl);
+
+                auto pillBtnSpr = CCNode::create();
+                pillBtnSpr->setContentSize({30.f, 14.f});
+                pillBtnSpr->setAnchorPoint({0.5f, 0.5f});
+                auto pillBtn = CCMenuItemSpriteExtra::create(pillBtnSpr, this, menu_selector(RollbackPopup::onSelectBranchPill));
+                pillBtn->setUserData(reinterpret_cast<void*>(static_cast<intptr_t>(i)));
+                pillBtn->setPosition({pillCenterX, y});
+                m_pillMenu->addChild(pillBtn);
+
+                float lineRad = isSelected ? 1.2f : 0.7f;
+                auto lineCol = isSelected ? selStroke : unselStroke;
+
+                if (i == 0) {
+                    m_branchDrawNode->drawSegment({startX, y}, {headX, y}, lineRad, lineCol);
+                    m_branchDrawNode->drawDot({startX, y}, 2.0f, lineCol);
+                    m_branchDrawNode->drawDot({headX, y}, 2.2f, lineCol);
+                } else {
+                    size_t parentIdx = info.parentIndex;
+                    if (parentIdx >= totalBranches) parentIdx = 0;
+                    auto parentInfo = revert.getBranchInfo(parentIdx);
+                    float parentY = getLaneY(parentIdx);
+                    float parentStartX = (parentIdx == 0) ? startX : (timeToX(parentInfo.forkTime) + 12.f);
+                    float forkX = std::max(parentStartX, timeToX(info.forkTime));
+                    float joinX = std::min(headX - 6.f, forkX + 12.f);
+
+                    m_branchDrawNode->drawSegment({forkX, parentY}, {joinX, y}, lineRad, lineCol);
+                    m_branchDrawNode->drawDot({forkX, parentY}, 2.2f, forkDotColor);
+                    m_branchDrawNode->drawSegment({joinX, y}, {headX, y}, lineRad, lineCol);
+                    m_branchDrawNode->drawDot({headX, y}, 2.2f, lineCol);
+                }
+
+                if (isSelected) {
+                    float bStart = (i == 0) ? startX : (timeToX(info.forkTime) + 12.f);
+                    float sliderVal = m_slider ? m_slider->getValue() : 1.0f;
+                    float cursorX = bStart + sliderVal * (headX - bStart);
+                    m_branchDrawNode->drawDot({cursorX, y}, 4.0f, {0.35f, 0.95f, 0.35f, 0.35f});
+                    m_branchDrawNode->drawDot({cursorX, y}, 2.0f, white);
+                }
+            }
+        }
+
+        void updateBranchView() {
+            auto const& revert = RevertManager::get();
+            size_t totalBranches = revert.getBranchCount();
+            if (m_selectedBranchIndex >= totalBranches) {
+                m_selectedBranchIndex = totalBranches - 1;
+            }
+
+            auto info = revert.getBranchInfo(m_selectedBranchIndex);
+            bool isActive = (m_selectedBranchIndex == revert.getActiveBranchIndex());
+
+            if (m_prevBtn) m_prevBtn->setVisible(m_selectedBranchIndex > 0);
+            if (m_nextBtn) m_nextBtn->setVisible(m_selectedBranchIndex + 1 < totalBranches);
+            if (m_deleteBtn) m_deleteBtn->setVisible(!isActive && totalBranches > 1);
+
+            m_branchTitleLabel->setString(info.name.c_str());
+            m_branchTitleLabel->setColor(isActive ? cocos2d::ccColor3B{120, 255, 120} : cocos2d::ccColor3B{255, 255, 255});
+            m_branchTitleLabel->limitLabelWidth(150.f, 0.38f, 0.2f);
+
+            if (info.isForked) {
+                m_branchSubLabel->setString(
+                    fmt::format("Forked from Branch {} ({} edits)", info.forkedFromBranchId, info.actionCount).c_str()
+                );
+            } else {
+                m_branchSubLabel->setString(
+                    fmt::format("Main Timeline ({} edits)", info.actionCount).c_str()
+                );
+            }
+            m_branchSubLabel->limitLabelWidth(240.f, 0.32f, 0.2f);
+
+            auto [sTime, eTime] = revert.getBranchTimeRange(m_selectedBranchIndex);
+            m_startTime = sTime;
+            m_endTime = eTime;
+            m_durationSeconds = std::chrono::duration_cast<std::chrono::milliseconds>(m_endTime - m_startTime).count() / 1000.f;
+
+            float initialVal = 1.0f;
+            if (m_durationSeconds > 0.001f) {
+                auto curTime = revert.getBranchCurrentTime(m_selectedBranchIndex);
+                float curElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(curTime - m_startTime).count() / 1000.f;
+                initialVal = std::clamp(curElapsed / m_durationSeconds, 0.0f, 1.0f);
+            }
+            m_slider->setValue(initialVal);
+
+            if (isActive) {
+                m_confirmSpr->setString("Apply Rollback");
+            } else {
+                m_confirmSpr->setString("Switch to Branch");
+            }
 
             updatePreview();
-            return true;
+            drawDiagram();
+        }
+
+        void onPrevBranch(CCObject*) {
+            if (m_selectedBranchIndex > 0) {
+                m_selectedBranchIndex--;
+                updateBranchView();
+            }
+        }
+
+        void onNextBranch(CCObject*) {
+            if (m_selectedBranchIndex + 1 < RevertManager::get().getBranchCount()) {
+                m_selectedBranchIndex++;
+                updateBranchView();
+            }
+        }
+
+        void onSlider(CCObject*) {
+            updatePreview();
+            drawDiagram();
         }
 
         void onPreset(CCObject* sender) {
             auto btn = static_cast<CCNode*>(sender);
-            m_minutes = static_cast<int>(reinterpret_cast<uintptr_t>(btn->getUserData()));
-            if (m_timeInput) m_timeInput->setString(std::to_string(m_minutes));
+            int secs = static_cast<int>(reinterpret_cast<intptr_t>(btn->getUserData()));
+            if (secs == -1) {
+                m_slider->setValue(0.0f);
+            } else if (secs == 0 || m_durationSeconds <= 0.001f) {
+                m_slider->setValue(1.0f);
+            } else {
+                float targetSecs = m_durationSeconds - static_cast<float>(secs);
+                float val = std::clamp(targetSecs / m_durationSeconds, 0.0f, 1.0f);
+                m_slider->setValue(val);
+            }
             updatePreview();
+            drawDiagram();
         }
 
         void updatePreview() {
-            auto preview = RevertManager::get().getRollbackPreview(std::chrono::seconds(m_minutes * 60));
-            if (m_previewLabel) {
-                m_previewLabel->setString(
-                    fmt::format("Placed: {} | Deleted: {} | Modified: {}",
-                        preview.placedCount, preview.deletedCount, preview.modifiedCount
-                    ).c_str()
-                );
+            if (!m_slider) return;
+            float val = m_slider->getValue();
+            auto targetTime = getTargetTime();
+
+            if (m_durationSeconds <= 0.001f) {
+                m_timeLabel->setString("No timeline history");
+                m_previewLabel->setString("No edits in this branch");
+                return;
+            }
+
+            if (val >= 0.999f) {
+                m_timeLabel->setString("Timeline: Head (Latest)");
+            } else {
+                auto diffSecs = std::chrono::duration_cast<std::chrono::seconds>(m_endTime - targetTime).count();
+                if (diffSecs < 60) {
+                    m_timeLabel->setString(fmt::format("Timeline: {}s ago", std::max<int64_t>(1, diffSecs)).c_str());
+                } else if (diffSecs < 3600) {
+                    m_timeLabel->setString(fmt::format("Timeline: {}m {}s ago", diffSecs / 60, diffSecs % 60).c_str());
+                } else {
+                    m_timeLabel->setString(fmt::format("Timeline: {}h {}m ago", diffSecs / 3600, (diffSecs % 3600) / 60).c_str());
+                }
+            }
+
+            bool isActive = (m_selectedBranchIndex == RevertManager::get().getActiveBranchIndex());
+            auto curTime = RevertManager::get().getBranchCurrentTime(m_selectedBranchIndex);
+            auto preview = RevertManager::get().getRollbackPreviewAtTimeInBranch(m_selectedBranchIndex, targetTime);
+
+            if (preview.isEmpty()) {
+                m_previewLabel->setString("No changes at this position");
+            } else {
+                std::vector<std::string> parts;
+                if (preview.deletedCount > 0 || preview.placedCount > 0 || preview.modifiedCount > 0) {
+                    if (isActive && targetTime <= curTime) {
+                        parts.push_back(fmt::format("-{} placed, +{} del, ~{} mod",
+                            preview.deletedCount, preview.placedCount, preview.modifiedCount));
+                    } else if (isActive) {
+                        parts.push_back(fmt::format("+{} placed, -{} del, ~{} mod",
+                            preview.placedCount, preview.deletedCount, preview.modifiedCount));
+                    } else {
+                        parts.push_back(fmt::format("-{} placed, +{} del, ~{} mod",
+                            preview.deletedCount, preview.placedCount, preview.modifiedCount));
+                    }
+                }
+                if (preview.colorCount > 0) {
+                    parts.push_back(fmt::format("{} col", preview.colorCount));
+                }
+                if (preview.settingsChanged) {
+                    parts.push_back("settings");
+                }
+
+                std::string prefix = (isActive && targetTime <= curTime) ? "Undo: " : (isActive ? "Redo: " : "Switch: ");
+                std::string fullText = prefix;
+                for (size_t i = 0; i < parts.size(); i++) {
+                    if (i > 0) fullText += ", ";
+                    fullText += parts[i];
+                }
+                m_previewLabel->setString(fullText.c_str());
             }
         }
 
         void onConfirm(CCObject*) {
-            RevertManager::get().rollbackLevel(std::chrono::seconds(m_minutes * 60));
-            geode::Notification::create(
-                fmt::format("Rolled back last {}m!", m_minutes),
-                geode::NotificationIcon::Success
-            )->show();
+            auto targetTime = getTargetTime();
+            bool isActive = (m_selectedBranchIndex == RevertManager::get().getActiveBranchIndex());
+
+            if (isActive) {
+                RevertManager::get().rollbackToTime(targetTime);
+                geode::Notification::create(
+                    "Timeline updated!",
+                    geode::NotificationIcon::Success
+                )->show();
+            } else {
+                RevertManager::get().switchActiveBranch(m_selectedBranchIndex, targetTime);
+                geode::Notification::create(
+                    fmt::format("Switched to Branch {}", m_selectedBranchIndex + 1),
+                    geode::NotificationIcon::Success
+                )->show();
+            }
+
             this->setKeyboardEnabled(false);
             this->setTouchEnabled(false);
             this->removeFromParentAndCleanup(true);
@@ -294,11 +835,11 @@ namespace mpedit {
     public:
         static RollbackPopup* create() {
             auto ret = new RollbackPopup();
-            if (ret->init()) {
+            if (ret && ret->init()) {
                 ret->autorelease();
                 return ret;
             }
-            delete ret;
+            CC_SAFE_DELETE(ret);
             return nullptr;
         }
     };
@@ -390,7 +931,7 @@ namespace mpedit {
         }
 
         void onRevert(CCObject*) {
-            RevertPlayerPopup::create(m_player)->show();
+            RevertPlayerPopup::create(m_player, m_isDisconnected)->show();
             this->setKeyboardEnabled(false);
             this->setTouchEnabled(false);
             this->removeFromParentAndCleanup(true);
@@ -438,7 +979,8 @@ namespace mpedit {
             borders->setPosition(this->center() - CCPoint{0.f, 5.f});
             m_mainLayer->addChild(borders);
 
-            for (auto const& dp : players) {
+            for (size_t i = 0; i < players.size(); ++i) {
+                auto const& dp = players[i];
                 auto cell = CCNode::create();
                 cell->setContentSize({w, 28.f});
 
@@ -472,7 +1014,7 @@ namespace mpedit {
                 manageSpr->setScale(0.45f);
                 auto manageBtn = CCMenuItemSpriteExtra::create(manageSpr, this, menu_selector(DisconnectedPlayersPopup::onManage));
                 manageBtn->setPosition({w / 2.f - 25.f, 0.f});
-                manageBtn->setUserData(reinterpret_cast<void*>(static_cast<uintptr_t>(dp.player.id)));
+                manageBtn->setTag(static_cast<int>(i));
                 menu->addChild(manageBtn);
 
                 m_scroll->m_contentLayer->addChild(cell);
@@ -489,15 +1031,13 @@ namespace mpedit {
 
         void onManage(CCObject* sender) {
             auto btn = static_cast<CCNode*>(sender);
-            int id = static_cast<int>(reinterpret_cast<uintptr_t>(btn->getUserData()));
-            for (auto const& dp : SessionManager::get().getDisconnectedPlayers()) {
-                if (dp.player.id == id) {
-                    PlayerControlsPopup::create(dp.player, true)->show();
-                    this->setKeyboardEnabled(false);
-                    this->setTouchEnabled(false);
-                    this->removeFromParentAndCleanup(true);
-                    break;
-                }
+            int idx = btn->getTag();
+            auto const& players = SessionManager::get().getDisconnectedPlayers();
+            if (idx >= 0 && idx < static_cast<int>(players.size())) {
+                PlayerControlsPopup::create(players[idx].player, true)->show();
+                this->setKeyboardEnabled(false);
+                this->setTouchEnabled(false);
+                this->removeFromParentAndCleanup(true);
             }
         }
 
@@ -676,15 +1216,24 @@ namespace mpedit {
                 nextLabelX += viewOnlyLabel->getScaledContentSize().width + 10.f;
             }
             
-            auto pingLabel = CCLabelBMFont::create(fmt::format("{} ms", info.ping).c_str(), "chatFont.fnt");
-            pingLabel->setID("ping-label");
-            pingLabel->setAnchorPoint({0, 0.5f});
-            pingLabel->setScale(0.35f);
-            if (info.ping < 100) pingLabel->setColor({100, 255, 100});
-            else if (info.ping < 200) pingLabel->setColor({255, 255, 100});
-            else pingLabel->setColor({255, 100, 100});
-            pingLabel->setPosition({nextLabelX, 15.f});
-            this->addChild(pingLabel);
+            if (info.id != SessionManager::get().getLocalPlayerId()) {
+                auto pingLabel = CCLabelBMFont::create(fmt::format("{} ms", info.ping).c_str(), "chatFont.fnt");
+                pingLabel->setID("ping-label");
+                pingLabel->setAnchorPoint({0, 0.5f});
+                pingLabel->setScale(0.35f);
+                if (info.ping < 100) pingLabel->setColor({100, 255, 100});
+                else if (info.ping < 200) pingLabel->setColor({255, 255, 100});
+                else pingLabel->setColor({255, 100, 100});
+                pingLabel->setPosition({nextLabelX, 15.f});
+                this->addChild(pingLabel);
+
+                auto typeLabel = CCLabelBMFont::create("", "chatFont.fnt");
+                typeLabel->setID("type-label");
+                typeLabel->setAnchorPoint({0, 0.5f});
+                typeLabel->setScale(0.35f);
+                typeLabel->setPosition({pingLabel->getPositionX() + pingLabel->getScaledContentSize().width + 8.f, 15.f});
+                this->addChild(typeLabel);
+            }
             
             this->setID(fmt::format("player-cell-{}", info.id));
             
@@ -893,13 +1442,29 @@ namespace mpedit {
         
         auto players = SessionManager::get().getPlayers();
         for (auto const& p : players) {
+            if (p.id == SessionManager::get().getLocalPlayerId()) continue;
             auto cell = m_scrollLayer->m_contentLayer->getChildByID(fmt::format("player-cell-{}", p.id));
             if (cell) {
-                if (auto pingLabel = typeinfo_cast<CCLabelBMFont*>(cell->getChildByID("ping-label"))) {
+                auto pingLabel = typeinfo_cast<CCLabelBMFont*>(cell->getChildByID("ping-label"));
+                if (pingLabel) {
                     pingLabel->setString(fmt::format("{} ms", p.ping).c_str());
                     if (p.ping < 100) pingLabel->setColor({100, 255, 100});
                     else if (p.ping < 200) pingLabel->setColor({255, 255, 100});
                     else pingLabel->setColor({255, 100, 100});
+                }
+                if (auto typeLabel = typeinfo_cast<CCLabelBMFont*>(cell->getChildByID("type-label"))) {
+                    if (pingLabel) {
+                        typeLabel->setPositionX(pingLabel->getPositionX() + pingLabel->getScaledContentSize().width + 8.f);
+                    }
+                    auto type = P2PManager::get().getConnectionType(p.id);
+                    if (!type.empty()) {
+                        typeLabel->setString(fmt::format("[{}]", type).c_str());
+                        if (type == "STUN" || type == "LAN") typeLabel->setColor({100, 255, 100});
+                        else if (type == "TURN") typeLabel->setColor({255, 180, 100});
+                        else typeLabel->setColor({200, 200, 200});
+                    } else {
+                        typeLabel->setString("");
+                    }
                 }
             }
         }
@@ -986,6 +1551,7 @@ namespace mpedit {
 
     void MultiplayerMenuPopup::clearCenter() {
         m_statusLabel = nullptr;
+        m_flavorLabel = nullptr;
         m_scrollLayer = nullptr;
         m_centerNode->removeAllChildren();
         if (m_sessionUiNode) m_sessionUiNode->removeAllChildren();
@@ -1170,6 +1736,8 @@ namespace mpedit {
         m_statusLabel->setScale(0.6f);
         m_statusLabel->setColor({255, 255, 100});
         m_centerNode->addChild(m_statusLabel);
+
+        this->createFlavorLabel({center.width, center.height - 52.f});
 
         auto cancelSprite = ButtonSprite::create("Cancel", "goldFont.fnt", "GJ_button_06.png", 0.8f);
         cancelSprite->setScale(0.65f);
@@ -1460,9 +2028,11 @@ namespace mpedit {
 
         m_statusLabel = CCLabelBMFont::create(statusText.c_str(), "chatFont.fnt");
         m_statusLabel->setScale(0.55f);
-        m_statusLabel->setPosition({center.width, center.height - 45.f});
+        m_statusLabel->setPosition({center.width, center.height - 35.f});
         m_statusLabel->setColor({200, 200, 200});
         m_centerNode->addChild(m_statusLabel);
+
+        this->createFlavorLabel({center.width, center.height - 56.f});
 
         auto cancelSprite = ButtonSprite::create("Cancel", "goldFont.fnt", "GJ_button_06.png", 0.8f);
         cancelSprite->setScale(0.65f);
@@ -1473,6 +2043,55 @@ namespace mpedit {
         m_sessionUiNode->addChild(cancelMenu);
 
         
+    }
+
+    static const std::vector<std::string> s_funnyLines = {
+        "Loading friends...",
+        "Trying to connect to the host's toaster...",
+        "Sending out carrier pigeons...",
+        "Downloading more RAM...",
+        "Toppling the firewall...",
+        "Placing crash triggers...",
+        "Adding 100,000 glow objects...",
+        "Adding lag spikes...",
+        "Contacting RobTop Games...",
+        "Adding fixed hitboxes..."
+    };
+
+    void MultiplayerMenuPopup::createFlavorLabel(cocos2d::CCPoint const& pos) {
+        if (!geode::Mod::get()->getSettingValue<bool>("funny-loading-messages")) {
+            return;
+        }
+
+        m_currentFlavorIndex = rand() % s_funnyLines.size();
+
+        m_flavorLabel = CCLabelBMFont::create(s_funnyLines[m_currentFlavorIndex].c_str(), "chatFont.fnt");
+        m_flavorLabel->setScale(0.42f);
+        m_flavorLabel->setPosition(pos);
+        m_flavorLabel->setColor({180, 180, 200});
+        m_flavorLabel->setOpacity(160);
+        m_centerNode->addChild(m_flavorLabel);
+
+        auto cycleAction = CCRepeatForever::create(CCSequence::create(
+            CCDelayTime::create(3.2f),
+            CCFadeTo::create(0.25f, 0),
+            CCCallFunc::create(this, callfunc_selector(MultiplayerMenuPopup::cycleFlavorText)),
+            CCFadeTo::create(0.25f, 160),
+            nullptr
+        ));
+
+        m_flavorLabel->runAction(cycleAction);
+    }
+
+    void MultiplayerMenuPopup::cycleFlavorText(cocos2d::CCObject*) {
+        if (!m_flavorLabel) return;
+        if (s_funnyLines.size() > 1) {
+            size_t nextIdx = rand() % (s_funnyLines.size() - 1);
+            if (nextIdx >= m_currentFlavorIndex) nextIdx++;
+            m_currentFlavorIndex = nextIdx;
+        }
+        m_flavorLabel->setString(s_funnyLines[m_currentFlavorIndex].c_str());
+        m_flavorLabel->setOpacity(0);
     }
 
 }

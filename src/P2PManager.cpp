@@ -35,6 +35,15 @@ namespace mpedit {
         rtc::Configuration config;
         config.iceServers.push_back({"stun:stun.l.google.com:19302"});
         config.iceServers.push_back({"stun:stun.cloudflare.com:3478"});
+        config.iceServers.push_back({"stun:stun.nextcloud.com:443"});
+        config.iceServers.push_back({"stun:stun.1und1.de:3478"});
+        config.iceServers.push_back({"stun:stun.sipgate.net:3478"});
+
+        config.iceServers.emplace_back("openrelay.metered.ca", 80, "openrelayproject", "openrelayproject", rtc::IceServer::RelayType::TurnUdp);
+        config.iceServers.emplace_back("openrelay.metered.ca", 443, "openrelayproject", "openrelayproject", rtc::IceServer::RelayType::TurnUdp);
+        config.iceServers.emplace_back("openrelay.metered.ca", 443, "openrelayproject", "openrelayproject", rtc::IceServer::RelayType::TurnTcp);
+        config.iceServers.emplace_back("openrelay.metered.ca", 443, "openrelayproject", "openrelayproject", rtc::IceServer::RelayType::TurnTls);
+
         config.maxMessageSize = 250 * 1024 * 1024;
         return config;
     }
@@ -84,6 +93,40 @@ namespace mpedit {
             return it->second.reliable->bufferedAmount();
         }
         return 0;
+    }
+
+    std::string P2PManager::getConnectionType(int playerId) {
+        if (m_isDedicated) return "SERVER";
+
+        int targetId = playerId;
+        if (m_role == Role::Client) {
+            if (playerId == m_localPlayerId || playerId == 0) {
+                targetId = 0;
+            } else {
+                return "";
+            }
+        } else if (m_role == Role::Host) {
+            if (playerId == 0) return "HOST";
+        }
+
+        std::lock_guard lock(m_peersMutex);
+        auto it = m_peers.find(targetId);
+        if (it != m_peers.end() && it->second.pc) {
+            rtc::Candidate local, remote;
+            if (it->second.pc->getSelectedCandidatePair(&local, &remote)) {
+                if (local.type() == rtc::Candidate::Type::Relayed || remote.type() == rtc::Candidate::Type::Relayed) {
+                    return "TURN";
+                }
+                if (local.type() == rtc::Candidate::Type::ServerReflexive || remote.type() == rtc::Candidate::Type::ServerReflexive ||
+                    local.type() == rtc::Candidate::Type::PeerReflexive || remote.type() == rtc::Candidate::Type::PeerReflexive) {
+                    return "STUN";
+                }
+                if (local.type() == rtc::Candidate::Type::Host && remote.type() == rtc::Candidate::Type::Host) {
+                    return "LAN";
+                }
+            }
+        }
+        return "";
     }
 
 
@@ -136,8 +179,6 @@ namespace mpedit {
             
             if (m_role == Role::Client) {
                 sendTo(0, proto::serializePing(nowMs), ChannelType::Unreliable);
-            } else if (m_role == Role::Host) {
-                broadcast(proto::serializePingUpdate(0), ChannelType::Unreliable);
             }
         }
 

@@ -35,6 +35,8 @@ namespace mpedit {
             int songID = 0;
             float levelLength = 0;
             std::string levelName = "";
+
+            bool operator==(LevelSettingsData const& o) const = default;
         };
 
         struct ColorChannelData {

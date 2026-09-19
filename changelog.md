@@ -1,9 +1,14 @@
-# 0.6.4
-- Anti griefing features! Hosts can now revert any player changes from the player list, either for all time or within the last X minutes.
+# 0.7.0
+- Anti-griefing features! Hosts can now revert any player's changes from the player list.
 - Added a "Recent" players menu so hosts can still ban and revert griefers even after they leave the session.
-- Added a "Rollback" feature allowing hosts to roll back the entire level by X minutes.
-- Fixed leaving a room not update the player count in certain situations.
-- Optimized mod package and resources.
+- Added a "Level Timeline" menu allowing hosts to view the history of the level and roll back (or forward) changes to any point in time. 
+- The timeline also branches, so making changes to an older version of the level creates a separate branch instead of overwriting.
+- Added free public TURN servers so users with strict firewalls or blocked ISPs can still connect to each other if standard P2P doesn't work.
+- Shows indicator on player list showing whether players are connected via "STUN", "TURN", "LAN", or "SERVER".
+- Added funny flavor text when trying to join a host. Can be toggled in the mod settings.
+- Fixed leaving a room not updating the player count in certain situations.
+- Fixed your ping ms being shown on your name instead of the host when you join as a guest.
+- Optimized mod build to reduce size.
 
 # 0.6.3
 - Changed default signaling server from deno deploy to cloudflare workers for zero server downtime, lower latency, and improved usage stats (hopefully).
