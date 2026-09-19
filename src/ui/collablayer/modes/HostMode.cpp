@@ -37,27 +37,22 @@ bool HostMode::init() {
 
     auto winSize = CCDirector::sharedDirector()->getWinSize();
 
-    auto self = this;
-    self->retain();
-
-    auto roomSetup = RoomCreateLayer::create([self]() {
-        if (self->m_listLayer) {
-            self->scheduleOnce(schedule_selector(HostMode::showListAfterDelay), 0.5f);
+    auto roomSetup = RoomCreateLayer::create([this]() {
+        if (m_listLayer) {
+            this->scheduleOnce(schedule_selector(HostMode::showListAfterDelay), 0.5f);
         }
-        self->release();
     });
 
     if (!roomSetup) {
-        self->release();
         return false;
     }
 
     this->addChild(roomSetup);
 
     // Register callback for when session ends
-    mpedit::SessionManager::get().onSessionEnded(this, [self]() {
-        if (self->m_listLayer) {
-            self->m_listLayer->setVisible(false);
+    mpedit::SessionManager::get().onSessionEnded(this, [this]() {
+        if (m_listLayer) {
+            m_listLayer->setVisible(false);
         }
     });
 

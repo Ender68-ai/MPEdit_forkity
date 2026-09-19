@@ -14,6 +14,10 @@ using namespace geode::prelude;
 using namespace mpedit;
 
 
+RoomCreateLayer::~RoomCreateLayer() {
+    mpedit::SessionManager::get().removeListener(this);
+}
+
 
 RoomCreateLayer* RoomCreateLayer::create(std::function<void()> onRoomCreated) {
     auto ret = new RoomCreateLayer();
@@ -270,8 +274,6 @@ bool RoomCreateLayer::init() {
     panel->addChild(passwordToggleMenu);
     m_passwordToggleMenu = passwordToggleMenu;
     
-    this->retain();
-
     mpedit::SessionManager::get().onPlayerJoined(this, [this](mpedit::PlayerInfo const&) {
         if (this->m_scrollLayer) {
             this->refreshPlayerList();

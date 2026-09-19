@@ -52,6 +52,7 @@ protected:
     std::function<void()> m_onRoomCreated;
 
 public:
+    ~RoomCreateLayer();
     static RoomCreateLayer* create(std::function<void()> onRoomCreated = {});
 
     void onCreate(CCObject*);

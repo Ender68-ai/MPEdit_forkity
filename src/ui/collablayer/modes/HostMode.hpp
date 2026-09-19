@@ -10,7 +10,7 @@ class HostMode : public CCNode {
         bool init();
         void showListAfterDelay(float);
 
-        GJListLayer* m_listLayer;
+        GJListLayer* m_listLayer = nullptr;
 
     public:
         ~HostMode();

@@ -1,7 +1,11 @@
 #include <Geode/modify/LevelBrowserLayer.hpp>
 #include <Geode/binding/LevelBrowserLayer.hpp>
+#include <Geode/Geode.hpp>
+
 #include "ui/ui.hpp"
 #include "ui/collablayer/CollabLayer.hpp"
+
+using namespace geode::prelude;
 
 class $modify(MyLevelBrowserLayer, LevelBrowserLayer) {
     bool init(GJSearchObject* object) {
@@ -11,14 +15,10 @@ class $modify(MyLevelBrowserLayer, LevelBrowserLayer) {
         auto myLevelsMenu = this->getChildByID("my-levels-menu");
         if (!myLevelsMenu) {
             log::info("my-levels-menu was not found");
-            return false;
+            return true;
         }
 
         auto btnSprite = CCSprite::create("button2.png"_spr);
-        if (!btnSprite) {
-            Geode::log::info("Could not load button2.png");
-            return false;
-        }
         btnSprite->setScale(0.4f);
 
         auto button = CCMenuItemSpriteExtra::create(
@@ -26,20 +26,25 @@ class $modify(MyLevelBrowserLayer, LevelBrowserLayer) {
             this,
             menu_selector(MyLevelBrowserLayer::onMyButton)
         );
-        auto menuPos = myLevelsMenu->getPosition();
-        button->setPosition({
-            menuPos.x - 5.f,
-            menuPos.y + 50.f
-        });
-        this->addChild(button);
+
+        button->setPosition(25.f, 75.f);
+
+        myLevelsMenu->addChild(button);
 
         return true;
-        }
-        void onMyButton(CCObject* sender) {
+    }
+
+    void onMyButton(CCObject* sender) {
         auto collabLayer = CollabLayer::create();
         auto scene = CCScene::create();
         scene->addChild(collabLayer);
-        auto transition = Transition::create(0.5f, scene, {0, 0, 0});
+
+        auto transition = Transition::create(
+            0.5f,
+            scene,
+            {0, 0, 0}
+        );
+
         CCDirector::sharedDirector()->replaceScene(transition);
-        };
-    };
+    }
+};
