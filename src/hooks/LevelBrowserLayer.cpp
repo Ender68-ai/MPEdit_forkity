@@ -16,7 +16,7 @@ class $modify(MyLevelBrowserLayer, LevelBrowserLayer) {
 
         auto btnSprite = CCSprite::create("button2.png"_spr);
         if (!btnSprite) {
-            log::info("Could not load button2.png");
+            Geode::log::info("Could not load button2.png");
             return false;
         }
         btnSprite->setScale(0.4f);
