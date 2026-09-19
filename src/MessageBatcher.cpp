@@ -1,6 +1,8 @@
 #include "MessageBatcher.hpp"
 #include "P2PManager.hpp"
 #include "BinaryProtocol.hpp"
+#include "RevertManager.hpp"
+#include "SessionManager.hpp"
 #include <Geode/loader/Log.hpp>
 
 namespace mpedit {
@@ -35,6 +37,7 @@ namespace mpedit {
         m_moveTimer = 0.f;
 
         if (!moves.empty()) {
+            RevertManager::get().onObjectsMoved(SessionManager::get().getLocalPlayerId(), moves);
             auto data = proto::serializeMoveBatch(moves);
             P2PManager::get().send(std::move(data), ChannelType::Reliable);
         }
@@ -52,6 +55,7 @@ namespace mpedit {
         m_transformTimer = 0.f;
 
         if (!transforms.empty()) {
+            RevertManager::get().onObjectsTransformed(SessionManager::get().getLocalPlayerId(), transforms);
             auto data = proto::serializeTransformObjects(transforms);
             P2PManager::get().send(std::move(data), ChannelType::Reliable);
         }

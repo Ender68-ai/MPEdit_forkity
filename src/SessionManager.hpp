@@ -19,6 +19,13 @@ namespace mpedit {
         int ping = 0;
     };
 
+    struct DisconnectedPlayerInfo {
+        PlayerInfo player;
+        std::chrono::steady_clock::time_point leftAt;
+    };
+
+    std::string formatTimeSince(std::chrono::steady_clock::time_point tp);
+
     struct RoomSettings {
         std::string roomName = "Room";
         std::string description = "";
@@ -64,6 +71,8 @@ namespace mpedit {
         void setPlayerViewOnly(int id, bool viewOnly);
         void setPlayerPing(int id, int ping);
         std::vector<PlayerInfo> const& getPlayers() const;
+        std::vector<DisconnectedPlayerInfo> const& getDisconnectedPlayers() const;
+        void addDisconnectedPlayer(PlayerInfo const& player);
         PlayerInfo const* getPlayer(int id) const;
         void updatePlayerCursor(int playerId, float x, float y, std::string const& status);
 
@@ -101,6 +110,7 @@ namespace mpedit {
         int m_localPlayerId = -1;
         std::string m_localPlayerName;
         std::vector<PlayerInfo> m_players;
+        std::vector<DisconnectedPlayerInfo> m_disconnectedPlayers;
         bool m_defaultViewOnly = false;
 
         std::map<void*, SessionCallback> m_onSessionStarted;

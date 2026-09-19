@@ -309,14 +309,18 @@ namespace mpedit {
     void P2PManager::onPeerDisconnected(int playerId, bool unexpected) {
         dispatchMessages();
         
+        bool existed = false;
         {
             std::lock_guard lock(m_peersMutex);
             auto it = m_peers.find(playerId);
             if (it != m_peers.end()) {
                 if (it->second.pc) it->second.pc->close();
                 m_peers.erase(it);
+                existed = true;
             }
         }
+
+        if (!existed) return;
 
         if (m_role == Role::Host) {
             proto::Writer w;
@@ -1096,8 +1100,14 @@ namespace mpedit {
                 }
             });
 
-            dc->onClosed([this, clientPlayerId]() {
-                log::info("P2PManager: Channel to player {} closed", clientPlayerId);
+            dc->onClosed([this, clientPlayerId, isReliable]() {
+                log::info("P2PManager: {} channel to player {} closed",
+                    isReliable ? "Reliable" : "Unreliable", clientPlayerId);
+                if (isReliable) {
+                    queueInMainThread([this, clientPlayerId]() {
+                        onPeerDisconnected(clientPlayerId, false);
+                    });
+                }
             });
         };
 
@@ -1186,6 +1196,25 @@ namespace mpedit {
             std::lock_guard lock(m_peersMutex);
             m_peers[clientPlayerId] = std::move(peer);
         }
+
+        std::thread([this, clientPlayerId]() {
+            std::this_thread::sleep_for(std::chrono::seconds(15));
+            geode::queueInMainThread([this, clientPlayerId]() {
+                if (m_role != Role::Host) return;
+                bool needsDisconnect = false;
+                {
+                    std::lock_guard lock(m_peersMutex);
+                    auto it = m_peers.find(clientPlayerId);
+                    if (it != m_peers.end() && !it->second.ready) {
+                        needsDisconnect = true;
+                    }
+                }
+                if (needsDisconnect) {
+                    log::warn("P2PManager: Handshake timed out for client {}, cleaning up", clientPlayerId);
+                    onPeerDisconnected(clientPlayerId, true);
+                }
+            });
+        }).detach();
     }
 
 
@@ -1305,6 +1334,16 @@ namespace mpedit {
             auto req = web::WebRequest();
             req.header("ngrok-skip-browser-warning", "1");
             async::spawn(req.send("DELETE", url));
+        }
+
+        if (m_role == Role::Client && !m_roomCode.empty() && m_localPlayerId >= 0 && !m_isDedicated) {
+            auto url = getSignalingUrl() + "/rooms/" + m_roomCode + "/leave";
+            auto req = geode::utils::web::WebRequest();
+            req.header("ngrok-skip-browser-warning", "1");
+            req.header("Content-Type", "application/json");
+            auto body = matjson::makeObject({{"playerId", m_localPlayerId}});
+            req.bodyJSON(body);
+            async::spawn(req.post(url));
         }
 
         {

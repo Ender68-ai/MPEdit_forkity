@@ -1,3 +1,10 @@
+# 0.6.4
+- Anti griefing features! Hosts can now revert any player changes from the player list, either for all time or within the last X minutes.
+- Added a "Recent" players menu so hosts can still ban and revert griefers even after they leave the session.
+- Added a "Rollback" feature allowing hosts to roll back the entire level by X minutes.
+- Fixed leaving a room not update the player count in certain situations.
+- Optimized mod package and resources.
+
 # 0.6.3
 - Changed default signaling server from deno deploy to cloudflare workers for zero server downtime, lower latency, and improved usage stats (hopefully).
 - Fixed signaling server resource limits and memory time usage bottlenecks.

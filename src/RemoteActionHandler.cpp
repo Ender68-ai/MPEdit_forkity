@@ -1,4 +1,5 @@
 #include "RemoteActionHandler.hpp"
+#include "RevertManager.hpp"
 #include "P2PManager.hpp"
 #include "BinaryProtocol.hpp"
 #include "SessionManager.hpp"
@@ -485,6 +486,7 @@ namespace mpedit {
             return;
         }
 
+        RevertManager::get().onObjectsPlaced(playerId, objects);
 
         m_processingRemote = true;
 
@@ -608,6 +610,7 @@ namespace mpedit {
         auto* editor = getEditorLayer();
         if (!editor) return;
 
+        RevertManager::get().onObjectsDeleted(playerId, uuids);
 
         m_processingRemote = true;
 
@@ -671,6 +674,7 @@ namespace mpedit {
         auto* editor = getEditorLayer();
         if (!editor) return;
 
+        RevertManager::get().onObjectsMoved(playerId, moves);
 
         m_processingRemote = true;
 
@@ -730,6 +734,7 @@ namespace mpedit {
         auto* editor = getEditorLayer();
         if (!editor) return;
 
+        RevertManager::get().onObjectsTransformed(playerId, transforms);
 
         log::debug("RemoteActionHandler: applying remote transform (playerId={}, n={})", playerId, transforms.size());
         m_processingRemote = true;
@@ -764,6 +769,7 @@ namespace mpedit {
         auto* editor = getEditorLayer();
         if (!editor) return;
 
+        RevertManager::get().onObjectsReconciled(playerId, reconciles);
 
         log::debug("RemoteActionHandler: applying remote reconcile (playerId={}, n={})", playerId, reconciles.size());
         m_processingRemote = true;
@@ -805,6 +811,7 @@ namespace mpedit {
         auto* editor = getEditorLayer();
         if (!editor) return;
 
+        RevertManager::get().onObjectsUpdated(playerId, objects);
 
         m_processingRemote = true;
         std::unordered_set<std::string> processedUUIDs;
@@ -1356,6 +1363,7 @@ namespace mpedit {
         m_pendingPlacements.clear();
 
         if (!objects.empty() && !m_processingRemote) {
+            RevertManager::get().onObjectsPlaced(SessionManager::get().getLocalPlayerId(), objects);
             constexpr size_t MAX_OBJECTS_PER_MESSAGE = 100;
             for (size_t i = 0; i < objects.size(); i += MAX_OBJECTS_PER_MESSAGE) {
                 size_t chunkCount = std::min(MAX_OBJECTS_PER_MESSAGE, objects.size() - i);
@@ -1512,6 +1520,8 @@ namespace mpedit {
         auto* editor = getEditorLayer();
         if (!editor) return;
 
+        RevertManager::get().onSettingsUpdated(playerId, settings);
+
         m_processingRemote = true;
 
         log::info("RemoteActionHandler: Updating level settings from player {}", playerId);
@@ -1526,6 +1536,8 @@ namespace mpedit {
     void RemoteActionHandler::handleRemoteUpdateColorChannel(int playerId, ActionSerializer::ColorChannelData const& data) {
         auto* editor = getEditorLayer();
         if (!editor || !editor->m_levelSettings || !editor->m_levelSettings->m_effectManager) return;
+
+        RevertManager::get().onColorChannelUpdated(playerId, data);
 
         m_processingRemote = true;
 

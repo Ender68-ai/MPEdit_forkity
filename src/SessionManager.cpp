@@ -1,5 +1,6 @@
 #include "SessionManager.hpp"
 #include "P2PManager.hpp"
+#include "RevertManager.hpp"
 #include "utils/ChatFilter.hpp"
 #include "RemoteActionHandler.hpp"
 #include "BinaryProtocol.hpp"
@@ -32,6 +33,8 @@ namespace mpedit {
         m_localPlayerName = actualName;
         m_role = Role::Host;
         m_defaultViewOnly = settings.defaultViewOnly;
+        m_disconnectedPlayers.clear();
+        RevertManager::get().clear();
 
         setupNetworkHandlers();
         P2PManager::RoomSettings p2pSettings;
@@ -61,6 +64,8 @@ namespace mpedit {
         m_localPlayerName = actualName;
         m_roomCode = roomCode;
         m_role = Role::Client;
+        m_disconnectedPlayers.clear();
+        RevertManager::get().clear();
 
         setupNetworkHandlers();
         P2PManager::get().joinSession(roomCode, actualName, password);
@@ -78,6 +83,8 @@ namespace mpedit {
         m_localPlayerName = actualName;
         m_roomCode = roomCode;
         m_role = Role::Client;
+        m_disconnectedPlayers.clear();
+        RevertManager::get().clear();
         setupNetworkHandlers();
         P2PManager::get().joinDedicatedServer(url, roomCode, actualName, password);
         log::info("SessionManager: Joining dedicated server '{}' room '{}'", url, roomCode);
@@ -96,7 +103,9 @@ namespace mpedit {
         m_localPlayerId = -1;
         m_defaultViewOnly = false;
         m_players.clear();
+        m_disconnectedPlayers.clear();
         m_chatHistory.clear();
+        RevertManager::get().clear();
 
         for (auto& [id, cb] : sessionEndedCallbacks) {
             cb();
@@ -182,6 +191,33 @@ namespace mpedit {
 
     std::vector<PlayerInfo> const& SessionManager::getPlayers() const {
         return m_players;
+    }
+
+    std::vector<DisconnectedPlayerInfo> const& SessionManager::getDisconnectedPlayers() const {
+        return m_disconnectedPlayers;
+    }
+
+    void SessionManager::addDisconnectedPlayer(PlayerInfo const& player) {
+        for (auto it = m_disconnectedPlayers.begin(); it != m_disconnectedPlayers.end(); ++it) {
+            if (it->player.id == player.id) {
+                m_disconnectedPlayers.erase(it);
+                break;
+            }
+        }
+        m_disconnectedPlayers.push_back({player, std::chrono::steady_clock::now()});
+    }
+
+    std::string formatTimeSince(std::chrono::steady_clock::time_point tp) {
+        auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - tp).count();
+        if (elapsed < 60) {
+            return fmt::format("{}s ago", std::max(1L, elapsed));
+        }
+        long minutes = elapsed / 60;
+        if (minutes < 60) {
+            return fmt::format("{}m ago", minutes);
+        }
+        long hours = minutes / 60;
+        return fmt::format("{}h ago", hours);
     }
 
     PlayerInfo const* SessionManager::getPlayer(int id) const {
@@ -361,6 +397,7 @@ namespace mpedit {
                 }
             }
             if (!leftPlayer.name.empty()) {
+                addDisconnectedPlayer(leftPlayer);
                 auto callbacks = m_onPlayerLeft;
                 for (auto& [id, cb] : callbacks) cb(leftPlayer);
 
@@ -381,10 +418,11 @@ namespace mpedit {
                 }
             }
 
-            auto callbacks = m_onPlayerLeft;
-            for (auto& [id, cb] : callbacks) cb(leftPlayer);
-
             if (!leftPlayer.name.empty()) {
+                addDisconnectedPlayer(leftPlayer);
+                auto callbacks = m_onPlayerLeft;
+                for (auto& [id, cb] : callbacks) cb(leftPlayer);
+
                 geode::queueInMainThread([leftPlayer] {
                     geode::Notification::create(leftPlayer.name + " left", cocos2d::CCSprite::createWithSpriteFrameName("GJ_deleteIcon_001.png"))->show();
                 });

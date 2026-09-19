@@ -43,6 +43,8 @@ namespace mpedit {
         void onCopyCode(cocos2d::CCObject*);
         void onJoinByCode(cocos2d::CCObject*);
         void onDedicatedServers(cocos2d::CCObject*);
+        void onDisconnectedPlayers(cocos2d::CCObject*);
+        void onRollback(cocos2d::CCObject*);
 
         void fetchRooms();
         void populateRooms(std::vector<P2PManager::RoomInfo> const& rooms);

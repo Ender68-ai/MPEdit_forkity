@@ -9,6 +9,7 @@
 #include <Geode/utils/web.hpp>
 #include "DedicatedServersPopup.hpp"
 #include "ChatPopup.hpp"
+#include "../../RevertManager.hpp"
 
 
 using namespace geode::prelude;
@@ -70,32 +71,274 @@ namespace mpedit {
     };
 
 
+    class RevertPlayerPopup : public BasePopup {
+    protected:
+        PlayerInfo m_player;
+        geode::TextInput* m_timeInput = nullptr;
+        CCLabelBMFont* m_previewLabel = nullptr;
+        bool m_allTime = true;
+
+        bool init(PlayerInfo const& p) {
+            if (!BasePopup::init(260.f, 210.f)) return false;
+            m_player = p;
+            this->setTitle("Revert Changes");
+
+            auto layout = CCNode::create();
+            layout->setContentSize({240.f, 150.f});
+            layout->setPosition(this->center() + CCPoint{0.f, -10.f});
+            layout->setAnchorPoint({0.5f, 0.5f});
+            m_mainLayer->addChild(layout);
+
+            auto nameLabel = CCLabelBMFont::create(fmt::format("Player: {}", m_player.name).c_str(), "goldFont.fnt");
+            nameLabel->setScale(0.5f);
+            nameLabel->setPosition({120.f, 135.f});
+            layout->addChild(nameLabel);
+
+            auto modeMenu = CCMenu::create();
+            modeMenu->setContentSize({220.f, 30.f});
+            modeMenu->setPosition({120.f, 105.f});
+            modeMenu->setLayout(RowLayout::create()->setGap(10.f)->setAxisAlignment(AxisAlignment::Center));
+            layout->addChild(modeMenu);
+
+            auto allBtnSpr = ButtonSprite::create("All Time", "goldFont.fnt", "GJ_button_01.png", 0.6f);
+            allBtnSpr->setScale(0.6f);
+            auto allBtn = CCMenuItemSpriteExtra::create(allBtnSpr, this, menu_selector(RevertPlayerPopup::onSelectAllTime));
+            modeMenu->addChild(allBtn);
+
+            auto minsBtnSpr = ButtonSprite::create("Last X Mins", "goldFont.fnt", "GJ_button_04.png", 0.6f);
+            minsBtnSpr->setScale(0.6f);
+            auto minsBtn = CCMenuItemSpriteExtra::create(minsBtnSpr, this, menu_selector(RevertPlayerPopup::onSelectMinutes));
+            modeMenu->addChild(minsBtn);
+            modeMenu->updateLayout();
+
+            m_timeInput = geode::TextInput::create(60.f, "Mins", "chatFont.fnt");
+            m_timeInput->setCommonFilter(geode::CommonFilter::Int);
+            m_timeInput->setString("5");
+            m_timeInput->setPosition({120.f, 75.f});
+            m_timeInput->setVisible(false);
+            m_timeInput->setCallback([this](std::string const&) {
+                this->updatePreview();
+            });
+            layout->addChild(m_timeInput);
+
+            m_previewLabel = CCLabelBMFont::create("Loading...", "chatFont.fnt");
+            m_previewLabel->setScale(0.45f);
+            m_previewLabel->setPosition({120.f, 50.f});
+            layout->addChild(m_previewLabel);
+
+            auto confirmMenu = CCMenu::create();
+            confirmMenu->setPosition({120.f, 20.f});
+            layout->addChild(confirmMenu);
+
+            auto revertSpr = ButtonSprite::create("Confirm Revert", "goldFont.fnt", "GJ_button_06.png", 0.7f);
+            revertSpr->setScale(0.65f);
+            auto revertBtn = CCMenuItemSpriteExtra::create(revertSpr, this, menu_selector(RevertPlayerPopup::onConfirm));
+            confirmMenu->addChild(revertBtn);
+
+            updatePreview();
+            return true;
+        }
+
+        void onSelectAllTime(CCObject*) {
+            m_allTime = true;
+            if (m_timeInput) m_timeInput->setVisible(false);
+            updatePreview();
+        }
+
+        void onSelectMinutes(CCObject*) {
+            m_allTime = false;
+            if (m_timeInput) m_timeInput->setVisible(true);
+            updatePreview();
+        }
+
+        void updatePreview() {
+            std::optional<std::chrono::seconds> window = std::nullopt;
+            if (!m_allTime && m_timeInput) {
+                int mins = geode::utils::numFromString<int>(m_timeInput->getString()).unwrapOr(5);
+                mins = std::max(1, mins);
+                window = std::chrono::seconds(mins * 60);
+            }
+            auto preview = RevertManager::get().getRevertPreview(m_player.id, window);
+            if (m_previewLabel) {
+                m_previewLabel->setString(
+                    fmt::format("Placed: {} | Deleted: {} | Modified: {}",
+                        preview.placedCount, preview.deletedCount, preview.modifiedCount
+                    ).c_str()
+                );
+            }
+        }
+
+        void onConfirm(CCObject*) {
+            std::optional<std::chrono::seconds> window = std::nullopt;
+            if (!m_allTime && m_timeInput) {
+                int mins = geode::utils::numFromString<int>(m_timeInput->getString()).unwrapOr(5);
+                mins = std::max(1, mins);
+                window = std::chrono::seconds(mins * 60);
+            }
+            RevertManager::get().revertPlayer(m_player.id, window);
+            geode::Notification::create(
+                fmt::format("Reverted changes by {}", m_player.name),
+                geode::NotificationIcon::Success
+            )->show();
+            this->setKeyboardEnabled(false);
+            this->setTouchEnabled(false);
+            this->removeFromParentAndCleanup(true);
+        }
+
+    public:
+        static RevertPlayerPopup* create(PlayerInfo const& p) {
+            auto ret = new RevertPlayerPopup();
+            if (ret->init(p)) {
+                ret->autorelease();
+                return ret;
+            }
+            delete ret;
+            return nullptr;
+        }
+    };
+
+    class RollbackPopup : public BasePopup {
+    protected:
+        geode::TextInput* m_timeInput = nullptr;
+        CCLabelBMFont* m_previewLabel = nullptr;
+        int m_minutes = 5;
+
+        bool init() {
+            if (!BasePopup::init(260.f, 210.f)) return false;
+            this->setTitle("Rollback Level");
+
+            auto layout = CCNode::create();
+            layout->setContentSize({240.f, 150.f});
+            layout->setPosition(this->center() + CCPoint{0.f, -10.f});
+            layout->setAnchorPoint({0.5f, 0.5f});
+            m_mainLayer->addChild(layout);
+
+            auto descLabel = CCLabelBMFont::create("Revert all changes across room:", "chatFont.fnt");
+            descLabel->setScale(0.45f);
+            descLabel->setPosition({120.f, 135.f});
+            layout->addChild(descLabel);
+
+            auto presetMenu = CCMenu::create();
+            presetMenu->setContentSize({220.f, 25.f});
+            presetMenu->setPosition({120.f, 105.f});
+            presetMenu->setLayout(RowLayout::create()->setGap(6.f)->setAxisAlignment(AxisAlignment::Center));
+            layout->addChild(presetMenu);
+
+            for (int m : {1, 5, 15, 30}) {
+                auto spr = ButtonSprite::create(fmt::format("{}m", m).c_str(), "goldFont.fnt", "GJ_button_04.png", 0.6f);
+                spr->setScale(0.55f);
+                auto btn = CCMenuItemSpriteExtra::create(spr, this, menu_selector(RollbackPopup::onPreset));
+                btn->setUserData(reinterpret_cast<void*>(static_cast<uintptr_t>(m)));
+                presetMenu->addChild(btn);
+            }
+            presetMenu->updateLayout();
+
+            m_timeInput = geode::TextInput::create(70.f, "Mins", "chatFont.fnt");
+            m_timeInput->setCommonFilter(geode::CommonFilter::Int);
+            m_timeInput->setString("5");
+            m_timeInput->setPosition({120.f, 75.f});
+            m_timeInput->setCallback([this](std::string const& val) {
+                m_minutes = geode::utils::numFromString<int>(val).unwrapOr(5);
+                m_minutes = std::max(1, m_minutes);
+                this->updatePreview();
+            });
+            layout->addChild(m_timeInput);
+
+            m_previewLabel = CCLabelBMFont::create("Loading...", "chatFont.fnt");
+            m_previewLabel->setScale(0.45f);
+            m_previewLabel->setPosition({120.f, 48.f});
+            layout->addChild(m_previewLabel);
+
+            auto confirmMenu = CCMenu::create();
+            confirmMenu->setPosition({120.f, 18.f});
+            layout->addChild(confirmMenu);
+
+            auto rollbackSpr = ButtonSprite::create("Confirm Rollback", "goldFont.fnt", "GJ_button_06.png", 0.7f);
+            rollbackSpr->setScale(0.65f);
+            auto rollbackBtn = CCMenuItemSpriteExtra::create(rollbackSpr, this, menu_selector(RollbackPopup::onConfirm));
+            confirmMenu->addChild(rollbackBtn);
+
+            updatePreview();
+            return true;
+        }
+
+        void onPreset(CCObject* sender) {
+            auto btn = static_cast<CCNode*>(sender);
+            m_minutes = static_cast<int>(reinterpret_cast<uintptr_t>(btn->getUserData()));
+            if (m_timeInput) m_timeInput->setString(std::to_string(m_minutes));
+            updatePreview();
+        }
+
+        void updatePreview() {
+            auto preview = RevertManager::get().getRollbackPreview(std::chrono::seconds(m_minutes * 60));
+            if (m_previewLabel) {
+                m_previewLabel->setString(
+                    fmt::format("Placed: {} | Deleted: {} | Modified: {}",
+                        preview.placedCount, preview.deletedCount, preview.modifiedCount
+                    ).c_str()
+                );
+            }
+        }
+
+        void onConfirm(CCObject*) {
+            RevertManager::get().rollbackLevel(std::chrono::seconds(m_minutes * 60));
+            geode::Notification::create(
+                fmt::format("Rolled back last {}m!", m_minutes),
+                geode::NotificationIcon::Success
+            )->show();
+            this->setKeyboardEnabled(false);
+            this->setTouchEnabled(false);
+            this->removeFromParentAndCleanup(true);
+        }
+
+    public:
+        static RollbackPopup* create() {
+            auto ret = new RollbackPopup();
+            if (ret->init()) {
+                ret->autorelease();
+                return ret;
+            }
+            delete ret;
+            return nullptr;
+        }
+    };
+
     class PlayerControlsPopup : public BasePopup {
     protected:
         PlayerInfo m_player;
+        bool m_isDisconnected = false;
         
-        bool init(PlayerInfo const& p) {
-            if (!BasePopup::init(240.f, 200.f)) return false;
+        bool init(PlayerInfo const& p, bool isDisconnected = false) {
+            if (!BasePopup::init(240.f, 220.f)) return false;
             m_player = p;
-            this->setTitle("Player Controls");
+            m_isDisconnected = isDisconnected;
+            this->setTitle(m_isDisconnected ? "Player (Left)" : "Player Controls");
             
             auto layoutNode = CCMenu::create();
-            layoutNode->setContentSize({200.f, 120.f});
+            layoutNode->setContentSize({200.f, 150.f});
             layoutNode->setPosition(this->center() + cocos2d::CCPoint{0.f, -10.f});
-            layoutNode->setLayout(ColumnLayout::create()->setGap(10.f)->setAxisReverse(true));
+            layoutNode->setLayout(ColumnLayout::create()->setGap(8.f)->setAxisReverse(true));
             m_mainLayer->addChild(layoutNode);
             
-            auto viewSprite = ButtonSprite::create(m_player.isViewOnly ? "Remove View-Only" : "Make View-Only", "goldFont.fnt", "GJ_button_01.png", 0.6f);
-            auto viewBtn = CCMenuItemSpriteExtra::create(viewSprite, this, menu_selector(PlayerControlsPopup::onToggleViewOnly));
-            layoutNode->addChild(viewBtn);
-            
-            auto kickSprite = ButtonSprite::create("Kick", "goldFont.fnt", "GJ_button_06.png", 0.6f);
-            auto kickBtn = CCMenuItemSpriteExtra::create(kickSprite, this, menu_selector(PlayerControlsPopup::onKick));
-            layoutNode->addChild(kickBtn);
+            if (!m_isDisconnected) {
+                auto viewSprite = ButtonSprite::create(m_player.isViewOnly ? "Remove View-Only" : "Make View-Only", "goldFont.fnt", "GJ_button_01.png", 0.6f);
+                auto viewBtn = CCMenuItemSpriteExtra::create(viewSprite, this, menu_selector(PlayerControlsPopup::onToggleViewOnly));
+                layoutNode->addChild(viewBtn);
+                
+                auto kickSprite = ButtonSprite::create("Kick", "goldFont.fnt", "GJ_button_06.png", 0.6f);
+                auto kickBtn = CCMenuItemSpriteExtra::create(kickSprite, this, menu_selector(PlayerControlsPopup::onKick));
+                layoutNode->addChild(kickBtn);
+            }
             
             auto banSprite = ButtonSprite::create("Ban", "goldFont.fnt", "GJ_button_06.png", 0.6f);
             auto banBtn = CCMenuItemSpriteExtra::create(banSprite, this, menu_selector(PlayerControlsPopup::onBan));
             layoutNode->addChild(banBtn);
+
+            if (SessionManager::get().getRole() == SessionManager::Role::Host) {
+                auto revertSprite = ButtonSprite::create("Revert Changes", "goldFont.fnt", "GJ_button_06.png", 0.6f);
+                auto revertBtn = CCMenuItemSpriteExtra::create(revertSprite, this, menu_selector(PlayerControlsPopup::onRevert));
+                layoutNode->addChild(revertBtn);
+            }
             
             layoutNode->updateLayout();
             
@@ -122,6 +365,7 @@ namespace mpedit {
             SessionManager::get().setPlayerViewOnly(m_player.id, newValue);
             if (MultiplayerMenuPopup::s_instance) MultiplayerMenuPopup::s_instance->setupActiveSession();
         }
+
         void onKick(CCObject*) { 
             sendAction(proto::Opcode::KickPlayer); 
             int id = m_player.id;
@@ -132,6 +376,7 @@ namespace mpedit {
                 });
             }).detach();
         }
+
         void onBan(CCObject*) { 
             sendAction(proto::Opcode::BanPlayer); 
             P2PManager::get().banPlayer(m_player.name);
@@ -143,11 +388,123 @@ namespace mpedit {
                 });
             }).detach();
         }
+
+        void onRevert(CCObject*) {
+            RevertPlayerPopup::create(m_player)->show();
+            this->setKeyboardEnabled(false);
+            this->setTouchEnabled(false);
+            this->removeFromParentAndCleanup(true);
+        }
         
     public:
-        static PlayerControlsPopup* create(PlayerInfo const& p) {
+        static PlayerControlsPopup* create(PlayerInfo const& p, bool isDisconnected = false) {
             auto ret = new PlayerControlsPopup();
-            if (ret->init(p)) {
+            if (ret->init(p, isDisconnected)) {
+                ret->autorelease();
+                return ret;
+            }
+            delete ret;
+            return nullptr;
+        }
+    };
+
+    class DisconnectedPlayersPopup : public BasePopup {
+    protected:
+        geode::ScrollLayer* m_scroll = nullptr;
+
+        bool init() {
+            if (!BasePopup::init(260.f, 220.f)) return false;
+            this->setTitle("Recent Players");
+
+            auto const& players = SessionManager::get().getDisconnectedPlayers();
+
+            if (players.empty()) {
+                auto emptyLbl = CCLabelBMFont::create("No recent players", "chatFont.fnt");
+                emptyLbl->setScale(0.5f);
+                emptyLbl->setPosition(this->center() + CCPoint{0.f, -10.f});
+                m_mainLayer->addChild(emptyLbl);
+                return true;
+            }
+
+            float w = 230.f;
+            float h = 140.f;
+            m_scroll = geode::ScrollLayer::create({w, h});
+            m_scroll->setPosition(this->center() - CCPoint{w / 2.f, h / 2.f + 5.f});
+            m_scroll->m_contentLayer->setLayout(ColumnLayout::create()->setGap(2.f)->setAxisReverse(true)->setAxisAlignment(AxisAlignment::End));
+            m_mainLayer->addChild(m_scroll);
+
+            auto borders = ListBorders::create();
+            borders->setContentSize({w, h});
+            borders->setPosition(this->center() - CCPoint{0.f, 5.f});
+            m_mainLayer->addChild(borders);
+
+            for (auto const& dp : players) {
+                auto cell = CCNode::create();
+                cell->setContentSize({w, 28.f});
+
+                auto bg = CCScale9Sprite::create("square02_small.png");
+                bg->setContentSize({w, 28.f});
+                bg->setAnchorPoint({0, 0});
+                bg->setOpacity(70);
+                bg->setColor({0, 0, 0});
+                cell->addChild(bg);
+
+                auto name = CCLabelBMFont::create(dp.player.name.c_str(), "bigFont.fnt");
+                name->setAnchorPoint({0, 0.5f});
+                name->setScale(0.35f);
+                name->setPosition({10.f, 14.f});
+                cell->addChild(name);
+
+                auto timeStr = formatTimeSince(dp.leftAt);
+                auto timeLbl = CCLabelBMFont::create(timeStr.c_str(), "chatFont.fnt");
+                timeLbl->setAnchorPoint({0, 0.5f});
+                timeLbl->setScale(0.35f);
+                timeLbl->setColor({180, 180, 180});
+                timeLbl->setPosition({name->getPositionX() + name->getScaledContentSize().width + 8.f, 14.f});
+                cell->addChild(timeLbl);
+
+                auto menu = CCMenu::create();
+                menu->setContentSize(cell->getContentSize());
+                menu->setPosition(cell->getContentSize() / 2.f);
+                cell->addChild(menu);
+
+                auto manageSpr = ButtonSprite::create("Manage", "goldFont.fnt", "GJ_button_01.png", 0.6f);
+                manageSpr->setScale(0.45f);
+                auto manageBtn = CCMenuItemSpriteExtra::create(manageSpr, this, menu_selector(DisconnectedPlayersPopup::onManage));
+                manageBtn->setPosition({w / 2.f - 25.f, 0.f});
+                manageBtn->setUserData(reinterpret_cast<void*>(static_cast<uintptr_t>(dp.player.id)));
+                menu->addChild(manageBtn);
+
+                m_scroll->m_contentLayer->addChild(cell);
+            }
+
+            float totalH = players.size() * 30.f;
+            m_scroll->m_contentLayer->setContentHeight(std::max(h, totalH));
+            m_scroll->m_contentLayer->updateLayout();
+            m_scroll->scrollToTop();
+            geode::cocos::handleTouchPriority(this);
+
+            return true;
+        }
+
+        void onManage(CCObject* sender) {
+            auto btn = static_cast<CCNode*>(sender);
+            int id = static_cast<int>(reinterpret_cast<uintptr_t>(btn->getUserData()));
+            for (auto const& dp : SessionManager::get().getDisconnectedPlayers()) {
+                if (dp.player.id == id) {
+                    PlayerControlsPopup::create(dp.player, true)->show();
+                    this->setKeyboardEnabled(false);
+                    this->setTouchEnabled(false);
+                    this->removeFromParentAndCleanup(true);
+                    break;
+                }
+            }
+        }
+
+    public:
+        static DisconnectedPlayersPopup* create() {
+            auto ret = new DisconnectedPlayersPopup();
+            if (ret->init()) {
                 ret->autorelease();
                 return ret;
             }
@@ -941,8 +1298,36 @@ namespace mpedit {
 
         m_sessionUiNode->addChild(leaveMenu);
 
-        
+        auto actionMenu = CCMenu::create();
+        actionMenu->setContentSize({160.f, 40.f});
+        actionMenu->setPosition(this->fromBottomRight(35.f, 25.f));
+        actionMenu->setAnchorPoint({1.f, 0.5f});
+        actionMenu->setLayout(RowLayout::create()->setAxisAlignment(AxisAlignment::End)->setGap(8.f));
+
+        if (session.getRole() == SessionManager::Role::Host) {
+            auto rollbackSprite = ButtonSprite::create("Rollback", "goldFont.fnt", "GJ_button_05.png", 0.8f);
+            rollbackSprite->setScale(0.7f);
+            auto rollbackBtn = CCMenuItemSpriteExtra::create(rollbackSprite, this, menu_selector(MultiplayerMenuPopup::onRollback));
+            actionMenu->addChild(rollbackBtn);
+        }
+
+        auto recentSprite = ButtonSprite::create("Recent", "goldFont.fnt", "GJ_button_04.png", 0.8f);
+        recentSprite->setScale(0.7f);
+        auto recentBtn = CCMenuItemSpriteExtra::create(recentSprite, this, menu_selector(MultiplayerMenuPopup::onDisconnectedPlayers));
+        actionMenu->addChild(recentBtn);
+
+        actionMenu->updateLayout();
+        m_sessionUiNode->addChild(actionMenu);
+
         geode::cocos::handleTouchPriority(this);
+    }
+
+    void MultiplayerMenuPopup::onDisconnectedPlayers(CCObject*) {
+        DisconnectedPlayersPopup::create()->show();
+    }
+
+    void MultiplayerMenuPopup::onRollback(CCObject*) {
+        RollbackPopup::create()->show();
     }
 
     void MultiplayerMenuPopup::onChat(CCObject*) {

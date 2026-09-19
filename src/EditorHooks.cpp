@@ -14,6 +14,7 @@
 #include "MessageBatcher.hpp"
 #include "ActionSerializer.hpp"
 #include "RemoteActionHandler.hpp"
+#include "RevertManager.hpp"
 #include "ui/menu/MultiplayerMenuPopup.hpp"
 #include "ui/menu/CreateRoomPopup.hpp"
 #include "ui/QuickChatPopup.hpp"
@@ -148,9 +149,13 @@ class $modify(MPEditorPauseLayer, EditorPauseLayer) {
 
     void onMultiplayer(CCObject*) {
         if (SessionManager::get().isInSession()) {
-            MultiplayerMenuPopup::create()->show();
+            if (auto* popup = MultiplayerMenuPopup::create()) {
+                popup->show();
+            }
         } else {
-            CreateRoomPopup::create(nullptr)->show();
+            if (auto* popup = CreateRoomPopup::create(nullptr)) {
+                popup->show();
+            }
         }
     }
 
@@ -280,6 +285,7 @@ namespace {
     }
 
     void sendChunkedDeleteObjects(std::vector<std::string> const& uuids) {
+        RevertManager::get().onObjectsDeleted(SessionManager::get().getLocalPlayerId(), uuids);
         constexpr size_t MAX_UUIDS_PER_MESSAGE = 300;
         for (size_t i = 0; i < uuids.size(); i += MAX_UUIDS_PER_MESSAGE) {
             size_t count = std::min(MAX_UUIDS_PER_MESSAGE, uuids.size() - i);
@@ -290,6 +296,7 @@ namespace {
     }
 
     void sendChunkedMoveObjects(std::vector<ActionSerializer::MoveData> const& moves) {
+        RevertManager::get().onObjectsMoved(SessionManager::get().getLocalPlayerId(), moves);
         constexpr size_t MAX_MOVES_PER_MESSAGE = 300;
         for (size_t i = 0; i < moves.size(); i += MAX_MOVES_PER_MESSAGE) {
             size_t count = std::min(MAX_MOVES_PER_MESSAGE, moves.size() - i);
@@ -300,6 +307,7 @@ namespace {
     }
 
     void sendChunkedUpdateObjects(std::vector<ActionSerializer::ObjectData> const& updates) {
+        RevertManager::get().onObjectsUpdated(SessionManager::get().getLocalPlayerId(), updates);
         constexpr size_t MAX_UPDATES_PER_MESSAGE = 100;
         for (size_t i = 0; i < updates.size(); i += MAX_UPDATES_PER_MESSAGE) {
             size_t count = std::min(MAX_UPDATES_PER_MESSAGE, updates.size() - i);
@@ -310,6 +318,7 @@ namespace {
     }
 
     void sendChunkedReconcileObjects(std::vector<ActionSerializer::ReconcileData> const& reconciles) {
+        RevertManager::get().onObjectsReconciled(SessionManager::get().getLocalPlayerId(), reconciles);
         constexpr size_t MAX_RECONCILES_PER_MESSAGE = 1000;
         for (size_t i = 0; i < reconciles.size(); i += MAX_RECONCILES_PER_MESSAGE) {
             size_t count = std::min(MAX_RECONCILES_PER_MESSAGE, reconciles.size() - i);
@@ -883,6 +892,7 @@ class $modify(MPLevelEditorLayer, LevelEditorLayer) {
             }
         }
         if (!placedObjects.empty()) {
+            RevertManager::get().onObjectsPlaced(SessionManager::get().getLocalPlayerId(), placedObjects);
             auto data = proto::serializePlaceObjects(placedObjects);
             P2PManager::get().send(std::move(data), ChannelType::Reliable);
             log::info("EditorHooks: Synced redo placement of {} objects", placedObjects.size());
@@ -1936,6 +1946,7 @@ class $modify(MPGJColorSetupLayer, GJColorSetupLayer) {
                     
                     if (m_fields->m_cachedColors.find(channelID) == m_fields->m_cachedColors.end() || m_fields->m_cachedColors[channelID] != currentData) {
                         m_fields->m_cachedColors[channelID] = currentData;
+                        RevertManager::get().onColorChannelUpdated(session.getLocalPlayerId(), currentData);
                         auto packet = proto::serializeUpdateColorChannel(currentData);
                         P2PManager::get().send(std::move(packet), ChannelType::Reliable);
                         log::info("Broadcasting granular UpdateColorChannel for channel {}", channelID);
@@ -2000,6 +2011,7 @@ class $modify(MPLevelSettingsLayer, LevelSettingsLayer) {
                     
                     if (m_fields->m_cachedColors.find(channelID) == m_fields->m_cachedColors.end() || m_fields->m_cachedColors[channelID] != currentData) {
                         m_fields->m_cachedColors[channelID] = currentData;
+                        RevertManager::get().onColorChannelUpdated(session.getLocalPlayerId(), currentData);
                         auto packet = proto::serializeUpdateColorChannel(currentData);
                         P2PManager::get().send(std::move(packet), ChannelType::Reliable);
                         log::info("Broadcasting UpdateColorChannel for channel {} from LevelSettingsLayer", channelID);
@@ -2028,6 +2040,7 @@ class $modify(MPLevelSettingsLayer, LevelSettingsLayer) {
             settings.songID = editor->m_level->m_songID;
             settings.levelLength = editor->m_level->m_levelLength;
             
+            RevertManager::get().onSettingsUpdated(session.getLocalPlayerId(), settings);
             auto packet = proto::serializeUpdateSettings(settings);
             P2PManager::get().send(std::move(packet), ChannelType::Reliable);
         }
@@ -2051,6 +2064,7 @@ class $modify(MPLevelSettingsLayer, LevelSettingsLayer) {
             settings.songID = editor->m_level->m_songID;
             settings.levelLength = editor->m_level->m_levelLength;
             
+            RevertManager::get().onSettingsUpdated(session.getLocalPlayerId(), settings);
             auto packet = proto::serializeUpdateSettings(settings);
             P2PManager::get().send(std::move(packet), ChannelType::Reliable);
         }
