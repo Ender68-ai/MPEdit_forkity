@@ -172,6 +172,10 @@ namespace mpedit {
             std::vector<PendingCandidate> pendingCandidates;
             int localIceCount = 0;
             int remoteIceCount = 0;
+            int localStunCount = 0;
+            int localTurnCount = 0;
+            int remoteStunCount = 0;
+            int remoteTurnCount = 0;
         };
 
         rtc::Configuration makeRtcConfig();

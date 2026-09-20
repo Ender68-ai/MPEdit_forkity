@@ -1,5 +1,6 @@
 #include "DedicatedServersPopup.hpp"
 #include "MyHostedRoomsPopup.hpp"
+#include "MultiplayerMenuPopup.hpp"
 #include <Geode/ui/TextInput.hpp>
 #include <Geode/ui/BasedButtonSprite.hpp>
 
@@ -222,6 +223,7 @@ namespace mpedit {
     bool DedicatedServersPopup::init(std::function<void(std::string const&)> onConnect) {
         if (!BasePopup::init(360.f, 240.f)) return false;
         m_onConnect = onConnect;
+        MultiplayerMenuPopup::checkUpdatesAndPatreon();
         this->setTitle("Dedicated Servers");
 
         m_statusLabel = CCLabelBMFont::create("No saved servers.", "chatFont.fnt");

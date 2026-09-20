@@ -1,5 +1,6 @@
 # 0.7.0
-- Anti-griefing features! Hosts can now revert any player's changes from the player list.
+- AUTOMATIC MOD UPDATES! You can now update the mod completley in-game, no need to manually replace the .geode file for every update!
+- ANTI GRIEFING FEATURES! Hosts can now revert any player's changes from the player list.
 - Added a "Recent" players menu so hosts can still ban and revert griefers even after they leave the session.
 - Added a "Level Timeline" menu allowing hosts to view the history of the level and roll back (or forward) changes to any point in time. 
 - The timeline also branches, so making changes to an older version of the level creates a separate branch instead of overwriting.
@@ -8,6 +9,7 @@
 - Added funny flavor text when trying to join a host. Can be toggled in the mod settings.
 - Fixed leaving a room not updating the player count in certain situations.
 - Fixed your ping ms being shown on your name instead of the host when you join as a guest.
+- Fixed header in the UI to say "Multiplayer Edit" instead of just "Multiplayer".
 - Optimized mod build to reduce size.
 
 # 0.6.3

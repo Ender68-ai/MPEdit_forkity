@@ -21,6 +21,7 @@ namespace mpedit {
     bool CreateRoomPopup::init(MultiplayerMenuPopup* parent) {
         if (!BasePopup::init(300.f, 260.f)) return false;
         m_parentPopup = parent;
+        MultiplayerMenuPopup::checkUpdatesAndPatreon();
         
         this->setTitle("Create Room");
 

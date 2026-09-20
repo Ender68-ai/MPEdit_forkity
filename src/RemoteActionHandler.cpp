@@ -192,7 +192,7 @@ namespace mpedit {
             m_chunkedSync.uuidChunks.resize(msg.totalChunks);
             m_chunkedSync.active = true;
             
-            SessionManager::get().updateStatus(fmt::format("Syncing level (0/{})...", msg.totalChunks));
+            SessionManager::get().updateStatus(fmt::format("Syncing {} objects (0/{})...", msg.totalObjects, msg.totalChunks));
 
             log::info("RemoteActionHandler: SyncLevelStart received ({} chunks, {} objects)",
                 msg.totalChunks, msg.totalObjects);
@@ -209,7 +209,7 @@ namespace mpedit {
                 m_chunkedSync.chunks[msg.chunkIndex] = std::string(msg.data.begin(), msg.data.end());
                 m_chunkedSync.uuidChunks[msg.chunkIndex] = msg.uuids;
 
-                SessionManager::get().updateStatus(fmt::format("Syncing level ({}/{})...", msg.chunkIndex + 1, m_chunkedSync.totalChunks));
+                SessionManager::get().updateStatus(fmt::format("Syncing {} objects ({}/{})...", m_chunkedSync.totalObjects, msg.chunkIndex + 1, m_chunkedSync.totalChunks));
 
                 log::info("RemoteActionHandler: SyncLevelChunk received: {}/{}",
                     msg.chunkIndex + 1, m_chunkedSync.totalChunks);
@@ -377,7 +377,7 @@ namespace mpedit {
                 uuids.insert(uuids.end(), uuidChunk.begin(), uuidChunk.end());
             }
 
-            SessionManager::get().updateStatus("Sync complete, loading...");
+            SessionManager::get().updateStatus("Sync complete, loading level...");
 
             log::info("RemoteActionHandler: Reassembled sync string, size: {} bytes, {} objects",
                 objectsString.size(), uuids.size());

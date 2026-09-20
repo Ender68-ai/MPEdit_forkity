@@ -717,8 +717,13 @@ namespace mpedit {
                     auto it = m_peers.find(fromId);
                     if (it != m_peers.end() && it->second.pc) {
                         it->second.remoteIceCount++;
+                        rtc::Candidate rtcCand(cand, mid);
+                        if (rtcCand.type() == rtc::Candidate::Type::ServerReflexive) {
+                            it->second.remoteStunCount++;
+                        } else if (rtcCand.type() == rtc::Candidate::Type::Relayed) {
+                            it->second.remoteTurnCount++;
+                        }
                         if (it->second.pc->remoteDescription().has_value()) {
-                            rtc::Candidate rtcCand(cand, mid);
                             it->second.pc->addRemoteCandidate(rtcCand);
                         } else {
                             log::info("P2PManager: Remote description not set, buffering candidate from {}", fromId);
@@ -727,9 +732,19 @@ namespace mpedit {
                         
                         if (m_role == Role::Client && m_state.load() == State::Connecting && fromId == 0) {
                             if (m_waitingTimerFlag) m_waitingTimerFlag->store(false);
-                            queueInMainThread([this, totalCount = it->second.localIceCount + it->second.remoteIceCount]() {
+                            int totalStun = it->second.localStunCount + it->second.remoteStunCount;
+                            int totalTurn = it->second.localTurnCount + it->second.remoteTurnCount;
+                            queueInMainThread([this, totalStun, totalTurn]() {
+                                std::string status;
+                                if (totalTurn > 0) {
+                                    status = fmt::format("Testing TURN routes ({})...", totalTurn);
+                                } else if (totalStun > 0) {
+                                    status = fmt::format("Testing STUN routes ({})...", totalStun);
+                                } else {
+                                    status = "Checking routes...";
+                                }
                                 for (auto& cb : m_onStatus) {
-                                    cb(fmt::format("Checking routes ({} found)...", totalCount));
+                                    cb(status);
                                 }
                             });
                         }
@@ -890,14 +905,30 @@ namespace mpedit {
                         body["candidate"] = std::string(candidate.candidate());
                         body["mid"] = std::string(candidate.mid());
                         body["playerId"] = myId;
-                        queueInMainThread([this, roomCode, body]() {
+                        auto candType = candidate.type();
+                        queueInMainThread([this, roomCode, body, candType]() {
                             {
                                 std::lock_guard lock(m_peersMutex);
                                 if (m_peers.find(0) != m_peers.end()) {
                                     m_peers[0].localIceCount++;
+                                    if (candType == rtc::Candidate::Type::ServerReflexive) {
+                                        m_peers[0].localStunCount++;
+                                    } else if (candType == rtc::Candidate::Type::Relayed) {
+                                        m_peers[0].localTurnCount++;
+                                    }
                                     if (m_state.load() == State::Connecting) {
+                                        int totalStun = m_peers[0].localStunCount + m_peers[0].remoteStunCount;
+                                        int totalTurn = m_peers[0].localTurnCount + m_peers[0].remoteTurnCount;
+                                        std::string status;
+                                        if (totalTurn > 0) {
+                                            status = fmt::format("Testing TURN routes ({})...", totalTurn);
+                                        } else if (totalStun > 0) {
+                                            status = fmt::format("Testing STUN routes ({})...", totalStun);
+                                        } else {
+                                            status = "Checking routes...";
+                                        }
                                         for (auto& cb : m_onStatus) {
-                                            cb(fmt::format("Checking routes ({} found)...", m_peers[0].localIceCount + m_peers[0].remoteIceCount));
+                                            cb(status);
                                         }
                                     }
                                 }
@@ -962,17 +993,37 @@ namespace mpedit {
                             switch (state) {
                                 case rtc::PeerConnection::State::New: stateStr = "New"; break;
                                 case rtc::PeerConnection::State::Connecting: {
-                                    int total = 0;
+                                    int totalStun = 0;
+                                    int totalTurn = 0;
                                     {
                                         std::lock_guard lock(m_peersMutex);
                                         if (m_peers.find(0) != m_peers.end()) {
-                                            total = m_peers.at(0).localIceCount + m_peers.at(0).remoteIceCount;
+                                            totalStun = m_peers.at(0).localStunCount + m_peers.at(0).remoteStunCount;
+                                            totalTurn = m_peers.at(0).localTurnCount + m_peers.at(0).remoteTurnCount;
                                         }
                                     }
-                                    stateStr = fmt::format("Checking routes ({} found)...", total);
+                                    if (totalTurn > 0) {
+                                        stateStr = fmt::format("Testing TURN routes ({})...", totalTurn);
+                                    } else if (totalStun > 0) {
+                                        stateStr = fmt::format("Testing STUN routes ({})...", totalStun);
+                                    } else {
+                                        stateStr = "Checking routes...";
+                                    }
                                     break;
                                 }
-                                case rtc::PeerConnection::State::Connected: stateStr = "Route found! Securing connection..."; break;
+                                case rtc::PeerConnection::State::Connected: {
+                                    auto type = getConnectionType(0);
+                                    if (type == "STUN") {
+                                        stateStr = "Connected (STUN)! Securing...";
+                                    } else if (type == "TURN") {
+                                        stateStr = "Connected (TURN)! Securing...";
+                                    } else if (type == "LAN") {
+                                        stateStr = "Connected (LAN)! Securing...";
+                                    } else {
+                                        stateStr = "Connected! Securing...";
+                                    }
+                                    break;
+                                }
                                 case rtc::PeerConnection::State::Disconnected: stateStr = "Disconnected"; break;
                                 case rtc::PeerConnection::State::Failed: stateStr = "Connection Failed"; break;
                                 case rtc::PeerConnection::State::Closed: stateStr = "Closed"; break;
