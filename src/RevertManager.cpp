@@ -4,6 +4,7 @@
 #include "P2PManager.hpp"
 #include "BinaryProtocol.hpp"
 #include <Geode/Geode.hpp>
+#include <Geode/binding/TeleportPortalObject.hpp>
 #include <fmt/format.h>
 #include <algorithm>
 
@@ -228,6 +229,33 @@ namespace mpedit {
             rec.uuid = uuid;
             rec.preState = data;
             branch.actionLog.push_back(rec);
+
+            if (auto* tpPortal = typeinfo_cast<TeleportPortalObject*>(obj)) {
+                if (!tpPortal->m_isYellowPortal && tpPortal->m_orangePortal) {
+                    auto orangeUuid = handler.getUUIDForObject(tpPortal->m_orangePortal);
+                    if (!orangeUuid.empty()) {
+                        auto orangeData = ActionSerializer::extractObjectData(tpPortal->m_orangePortal, orangeUuid);
+
+                        DeletedEntry orangeEntry;
+                        orangeEntry.data = orangeData;
+                        orangeEntry.deletedBy = pName;
+                        orangeEntry.timestamp = now;
+                        m_deletedObjects[orangeUuid] = orangeEntry;
+
+                        m_lastTouchedBy[orangeUuid] = pName;
+                        m_touchTimestamps[orangeUuid] = now;
+
+                        ActionRecord orangeRec;
+                        orangeRec.type = ActionRecord::Type::Delete;
+                        orangeRec.playerName = pName;
+                        orangeRec.playerId = playerId;
+                        orangeRec.timestamp = now;
+                        orangeRec.uuid = orangeUuid;
+                        orangeRec.preState = orangeData;
+                        branch.actionLog.push_back(orangeRec);
+                    }
+                }
+            }
         }
         branch.cursor = branch.actionLog.size();
     }

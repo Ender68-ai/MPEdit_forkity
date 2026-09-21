@@ -858,7 +858,6 @@ class $modify(MPLevelEditorLayer, LevelEditorLayer) {
                 std::string uuid = handler.getUUIDForObject(obj);
                 if (!uuid.empty()) {
                     deletedUuids.push_back(uuid);
-                    handler.unregisterObject(uuid);
                 }
             } 
             else if (!existed_before && existed_after) {
@@ -901,6 +900,9 @@ class $modify(MPLevelEditorLayer, LevelEditorLayer) {
         }
         if (!deletedUuids.empty()) {
             sendChunkedDeleteObjects(deletedUuids);
+            for (auto const& uuid : deletedUuids) {
+                handler.unregisterObject(uuid);
+            }
             log::info("EditorHooks: Synced undo deletion of {} objects", deletedUuids.size());
         }
         if (!movedObjects.empty()) {
@@ -1417,19 +1419,20 @@ class $modify(MPEditorUI, EditorUI) {
                     auto uuid = handler.getUUIDForObject(obj);
                     if (!uuid.empty()) {
                         uuids.push_back(uuid);
-                        handler.unregisterObject(uuid);
                     }
                 }
             } else if (m_selectedObject) {
                 auto uuid = handler.getUUIDForObject(m_selectedObject);
                 if (!uuid.empty()) {
                     uuids.push_back(uuid);
-                    handler.unregisterObject(uuid);
                 }
             }
 
             if (!uuids.empty()) {
                 sendChunkedDeleteObjects(uuids);
+                for (auto const& uuid : uuids) {
+                    handler.unregisterObject(uuid);
+                }
             }
         }
 
