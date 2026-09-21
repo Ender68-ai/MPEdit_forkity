@@ -14,7 +14,7 @@ UploadServerPopup* UploadServerPopup::create(GJGameLevel* level) {
 }
 
 bool UploadServerPopup::init(GJGameLevel* level) {
-    if (!geode::Popup::init(300.f, 200.f)) return false;
+    if (!BasePopup::init(300.f, 200.f)) return false;
     
     m_level = level;
 
@@ -54,6 +54,7 @@ bool UploadServerPopup::init(GJGameLevel* level) {
     );
     hostBtnMenu->addChild(hostBtn);
 
+    this->syncTouchPriority();
     return true;
 }
 

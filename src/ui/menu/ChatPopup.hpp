@@ -1,10 +1,11 @@
 #pragma once
 
 #include <Geode/Geode.hpp>
+#include "../core/BasePopup.hpp"
 
 namespace mpedit {
 
-    class ChatPopup : public geode::Popup {
+    class ChatPopup : public BasePopup {
     protected:
         geode::ScrollLayer* m_scrollLayer = nullptr;
         geode::TextInput* m_input = nullptr;

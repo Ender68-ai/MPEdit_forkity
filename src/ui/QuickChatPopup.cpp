@@ -32,13 +32,14 @@ namespace mpedit {
         m_mainLayer->addChild(menu);
         
         m_input->getInputNode()->onClickTrackNode(true);
+        this->syncTouchPriority();
 
         return true;
     }
 
     void QuickChatPopup::onClose(cocos2d::CCObject* sender) {
         m_isClosing = true;
-        geode::Popup::onClose(sender);
+        BasePopup::onClose(sender);
     }
 
     void QuickChatPopup::keyDown(cocos2d::enumKeyCodes key, double p1) {
@@ -46,7 +47,7 @@ namespace mpedit {
             onSend(nullptr);
             return;
         }
-        geode::Popup::keyDown(key, p1);
+        BasePopup::keyDown(key, p1);
     }
 
     void QuickChatPopup::onSend(CCObject*) {

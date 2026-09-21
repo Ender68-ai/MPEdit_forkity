@@ -81,7 +81,7 @@ public:
 
 
 bool MyHostedRoomsPopup::init() {
-    if (!geode::Popup::init(360.f, 240.f)) return false;
+    if (!BasePopup::init(360.f, 240.f)) return false;
     this->setTitle("My Hosted Rooms");
 
     m_token = Mod::get()->getSettingValue<std::string>("cloud-auth-token");
@@ -147,7 +147,10 @@ void MyHostedRoomsPopup::setupList(matjson::Value const& rooms) {
     m_mainLayer->addChild(bg, -1);
     m_mainLayer->addChild(m_scrollLayer);
 
-    auto roomsArr = rooms.asArray().unwrapOr(std::vector<matjson::Value>());
+    std::vector<matjson::Value> roomsArr;
+    for (auto const& r : rooms) {
+        roomsArr.push_back(r);
+    }
     
     if (roomsArr.empty()) {
         auto lbl = CCLabelBMFont::create("No rooms found.", "chatFont.fnt");
@@ -172,6 +175,7 @@ void MyHostedRoomsPopup::setupList(matjson::Value const& rooms) {
         i++;
     }
     m_scrollLayer->moveToTop();
+    this->syncTouchPriority();
 }
 
 MyHostedRoomsPopup* MyHostedRoomsPopup::create() {
@@ -186,7 +190,7 @@ MyHostedRoomsPopup* MyHostedRoomsPopup::create() {
 
 
 bool ManageRoomPopup::init(matjson::Value const& roomObj, std::string const& url, std::string const& token) {
-    if (!geode::Popup::init(300.f, 280.f)) return false;
+    if (!BasePopup::init(300.f, 280.f)) return false;
     
     m_code = roomObj.contains("code") ? roomObj["code"].asString().unwrapOr("") : "";
     m_url = url;
@@ -248,13 +252,13 @@ void ManageRoomPopup::onDownloadBackups(CCObject*) {
     geode::utils::web::openLinkInBrowser(dlUrl);
 }
 
-class PasswordPopup : public geode::Popup {
+class PasswordPopup : public BasePopup {
 protected:
     ManageRoomPopup* m_parentPopup = nullptr;
     geode::TextInput* m_input = nullptr;
 
     bool init(ManageRoomPopup* parent) {
-        if (!geode::Popup::init(280.f, 150.f)) return false;
+        if (!BasePopup::init(280.f, 150.f)) return false;
         m_parentPopup = parent;
         this->setTitle("Change Password");
 
@@ -317,13 +321,13 @@ void ManageRoomPopup::onChangePassword(CCObject*) {
     PasswordPopup::create(this)->show();
 }
 
-class MaxPlayersPopup : public geode::Popup {
+class MaxPlayersPopup : public BasePopup {
 protected:
     ManageRoomPopup* m_parentPopup = nullptr;
     geode::TextInput* m_input = nullptr;
 
     bool init(ManageRoomPopup* parent) {
-        if (!geode::Popup::init(280.f, 150.f)) return false;
+        if (!BasePopup::init(280.f, 150.f)) return false;
         m_parentPopup = parent;
         this->setTitle("Max Players");
 

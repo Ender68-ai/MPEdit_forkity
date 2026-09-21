@@ -1,11 +1,11 @@
 #pragma once
 #include <Geode/Geode.hpp>
-#include <Geode/ui/Popup.hpp>
+#include "../core/BasePopup.hpp"
 #include <Geode/utils/web.hpp>
 
 namespace mpedit {
 
-    class MyHostedRoomsPopup : public geode::Popup {
+    class MyHostedRoomsPopup : public BasePopup {
     protected:
         geode::ScrollLayer* m_scrollLayer = nullptr;
         std::string m_url;
@@ -21,7 +21,7 @@ namespace mpedit {
         static MyHostedRoomsPopup* create();
     };
 
-    class ManageRoomPopup : public geode::Popup {
+    class ManageRoomPopup : public BasePopup {
     protected:
         std::string m_code;
         std::string m_url;

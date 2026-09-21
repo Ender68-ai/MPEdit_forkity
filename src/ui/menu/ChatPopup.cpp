@@ -56,6 +56,7 @@ namespace mpedit {
             this->populateChat();
         });
 
+        this->syncTouchPriority();
         return true;
     }
 
@@ -140,16 +141,15 @@ namespace mpedit {
         } else {
             m_scrollLayer->m_contentLayer->setPositionY(viewHeight - contentHeight);
         }
+        this->syncTouchPriority();
     }
 
-    
-    
     void ChatPopup::keyDown(cocos2d::enumKeyCodes key, double p1) {
         if (key == cocos2d::KEY_Enter) {
             onSend(nullptr);
             return;
         }
-        Popup::keyDown(key, p1);
+        BasePopup::keyDown(key, p1);
     }
 
     void ChatPopup::onSend(CCObject*) {
@@ -162,7 +162,7 @@ namespace mpedit {
 
     void ChatPopup::onClose(CCObject* obj) {
         SessionManager::get().removeListener(this);
-        Popup::onClose(obj);
+        BasePopup::onClose(obj);
     }
 
     ChatPopup* ChatPopup::create() {

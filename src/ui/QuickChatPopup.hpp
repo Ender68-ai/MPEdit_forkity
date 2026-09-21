@@ -1,10 +1,10 @@
 #pragma once
 #include <Geode/Geode.hpp>
-#include <Geode/ui/Popup.hpp>
+#include "core/BasePopup.hpp"
 
 namespace mpedit {
 
-    class QuickChatPopup : public geode::Popup {
+    class QuickChatPopup : public BasePopup {
     protected:
         bool m_isClosing = false;
         void onClose(cocos2d::CCObject*) override;

@@ -138,15 +138,16 @@ namespace mpedit {
         
         SessionManager::get().hostSession(Mod::get()->getSettingValue<std::string>("player-name"), settings);
         
-        this->setKeyboardEnabled(false);
-        this->setTouchEnabled(false);
-        this->removeFromParentAndCleanup(true);
-        if (m_parentPopup) {
-            m_parentPopup->onConnecting();
+        auto parent = m_parentPopup;
+        this->onClose(nullptr);
+        if (parent) {
+            parent->onConnecting();
         } else {
-            auto popup = MultiplayerMenuPopup::create();
-            popup->show();
-            popup->onConnecting();
+            geode::queueInMainThread([]() {
+                auto popup = MultiplayerMenuPopup::create();
+                popup->show();
+                popup->onConnecting();
+            });
         }
     }
 

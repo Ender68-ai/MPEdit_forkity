@@ -201,6 +201,7 @@ namespace mpedit {
         m_paletteContainer->setVisible(m_selectedType != 0);
         m_waveInfoContainer->setVisible(m_selectedType == 0);
 
+        this->syncTouchPriority();
         return true;
     }
 

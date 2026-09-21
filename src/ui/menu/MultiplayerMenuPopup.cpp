@@ -60,10 +60,9 @@ namespace mpedit {
             } else {
                 SessionManager::get().joinSession(m_room.roomCode, Mod::get()->getSettingValue<std::string>("player-name"), pwd);
             }
-            this->setKeyboardEnabled(false);
-            this->setTouchEnabled(false);
-            this->removeFromParentAndCleanup(true);
-            if (m_parent) m_parent->onConnecting();
+            auto parent = m_parent;
+            this->onClose(nullptr);
+            if (parent) parent->onConnecting();
         }
 
     public:
@@ -680,7 +679,7 @@ namespace mpedit {
             m_slider->setValue(0.0f);
             updatePreview();
 
-            geode::cocos::handleTouchPriority(this);
+            this->syncTouchPriority();
             return true;
         }
 
@@ -787,9 +786,7 @@ namespace mpedit {
                 geode::NotificationIcon::Success
             )->show();
 
-            this->setKeyboardEnabled(false);
-            this->setTouchEnabled(false);
-            this->removeFromParentAndCleanup(true);
+            this->onClose(nullptr);
         }
 
     public:
@@ -956,7 +953,7 @@ namespace mpedit {
 
             updateBranchView();
 
-            geode::cocos::handleTouchPriority(this);
+            this->syncTouchPriority();
             return true;
         }
 
@@ -1290,9 +1287,7 @@ namespace mpedit {
                 )->show();
             }
 
-            this->setKeyboardEnabled(false);
-            this->setTouchEnabled(false);
-            this->removeFromParentAndCleanup(true);
+            this->onClose(nullptr);
         }
 
     public:
@@ -1358,9 +1353,7 @@ namespace mpedit {
             auto p = writer.data();
             data.insert(data.end(), p.begin(), p.end());
             P2PManager::get().send(data, ChannelType::Reliable);
-            this->setKeyboardEnabled(false);
-            this->setTouchEnabled(false);
-            this->removeFromParentAndCleanup(true);
+            this->onClose(nullptr);
         }
 
         void onToggleViewOnly(CCObject*) {
@@ -1394,10 +1387,10 @@ namespace mpedit {
         }
 
         void onRevert(CCObject*) {
-            RevertPlayerPopup::create(m_player, m_isDisconnected)->show();
-            this->setKeyboardEnabled(false);
-            this->setTouchEnabled(false);
-            this->removeFromParentAndCleanup(true);
+            auto player = m_player;
+            bool isDisconnected = m_isDisconnected;
+            this->onClose(nullptr);
+            RevertPlayerPopup::create(player, isDisconnected)->show();
         }
         
     public:
@@ -1487,7 +1480,7 @@ namespace mpedit {
             m_scroll->m_contentLayer->setContentHeight(std::max(h, totalH));
             m_scroll->m_contentLayer->updateLayout();
             m_scroll->scrollToTop();
-            geode::cocos::handleTouchPriority(this);
+            this->syncTouchPriority();
 
             return true;
         }
@@ -1497,10 +1490,9 @@ namespace mpedit {
             int idx = btn->getTag();
             auto const& players = SessionManager::get().getDisconnectedPlayers();
             if (idx >= 0 && idx < static_cast<int>(players.size())) {
-                PlayerControlsPopup::create(players[idx].player, true)->show();
-                this->setKeyboardEnabled(false);
-                this->setTouchEnabled(false);
-                this->removeFromParentAndCleanup(true);
+                auto player = players[idx].player;
+                this->onClose(nullptr);
+                PlayerControlsPopup::create(player, true)->show();
             }
         }
 
@@ -1989,6 +1981,7 @@ namespace mpedit {
         m_leftMenu->addChild(appearanceBtn);
 
         m_leftMenu->updateLayout();
+        this->syncTouchPriority();
     }
 
     void MultiplayerMenuPopup::clearCenter() {
@@ -2065,7 +2058,7 @@ namespace mpedit {
         }
         m_scrollLayer->m_contentLayer->updateLayout();
         m_scrollLayer->scrollToTop();
-        geode::cocos::handleTouchPriority(this);
+        this->syncTouchPriority();
     }
 
     void MultiplayerMenuPopup::onRefresh(CCObject*) {
@@ -2190,7 +2183,7 @@ namespace mpedit {
         m_sessionUiNode->addChild(cancelMenu);
 
         
-        geode::cocos::handleTouchPriority(this);
+        this->syncTouchPriority();
     }
 
     void MultiplayerMenuPopup::updateStatus(std::string const& status) {
@@ -2329,7 +2322,7 @@ namespace mpedit {
         actionMenu->updateLayout();
         m_sessionUiNode->addChild(actionMenu);
 
-        geode::cocos::handleTouchPriority(this);
+        this->syncTouchPriority();
     }
 
     void MultiplayerMenuPopup::onDisconnectedPlayers(CCObject*) {

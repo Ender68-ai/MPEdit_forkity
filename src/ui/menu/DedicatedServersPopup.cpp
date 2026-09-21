@@ -134,11 +134,9 @@ namespace mpedit {
             std::string url = geode::utils::string::trim(m_input->getString());
             if (url.empty()) return;
             
-            this->setKeyboardEnabled(false);
-            this->setTouchEnabled(false);
-            this->removeFromParentAndCleanup(true);
-            
-            m_parentPopup->connectTo(url);
+            auto parent = m_parentPopup;
+            this->onClose(nullptr);
+            if (parent) parent->connectTo(url);
         }
 
     public:
@@ -202,9 +200,7 @@ namespace mpedit {
             m_parentPopup->saveServers(servers);
             m_parentPopup->setupList();
             
-            this->setKeyboardEnabled(false);
-            this->setTouchEnabled(false);
-            this->removeFromParentAndCleanup(true);
+            this->onClose(nullptr);
         }
 
     public:
@@ -304,6 +300,7 @@ namespace mpedit {
             i++;
         }
         m_scrollLayer->moveToTop();
+        this->syncTouchPriority();
     }
 
     void DedicatedServersPopup::onAddServer(CCObject*) {
@@ -332,10 +329,9 @@ namespace mpedit {
     }
 
     void DedicatedServersPopup::connectTo(std::string const& url) {
-        this->setKeyboardEnabled(false);
-        this->setTouchEnabled(false);
-        this->removeFromParentAndCleanup(true);
-        if (m_onConnect) m_onConnect(url);
+        auto onConnect = m_onConnect;
+        this->onClose(nullptr);
+        if (onConnect) onConnect(url);
     }
 
     DedicatedServersPopup* DedicatedServersPopup::create(std::function<void(std::string const&)> onConnect) {

@@ -1,12 +1,12 @@
 #pragma once
 
 #include <Geode/Geode.hpp>
-#include <Geode/ui/Popup.hpp>
+#include "../core/BasePopup.hpp"
 #include <Geode/ui/TextInput.hpp>
 
 using namespace geode::prelude;
 
-class UploadServerPopup : public geode::Popup {
+class UploadServerPopup : public mpedit::BasePopup {
 protected:
     GJGameLevel* m_level;
     geode::TextInput* m_maxPlayersInput;
