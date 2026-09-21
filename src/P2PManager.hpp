@@ -179,7 +179,7 @@ namespace mpedit {
         };
 
         rtc::Configuration makeRtcConfig();
-        void createHostPeer(int clientPlayerId, std::string const& clientName, std::string const& iconStr = "");
+        void createHostPeer(int clientPlayerId, std::string const& clientName, std::string const& iconStr = "", int colorIndex = -1);
 
         void signalingCreateRoom(std::string const& playerName, RoomSettings const& settings);
         void signalingJoinRoom(std::string const& roomCode, std::string const& playerName, std::string const& password);

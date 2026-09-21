@@ -2,16 +2,74 @@
 #include "P2PManager.hpp"
 #include "RevertManager.hpp"
 #include "utils/ChatFilter.hpp"
+#include "utils/ColorPalette.hpp"
 #include "RemoteActionHandler.hpp"
 #include "BinaryProtocol.hpp"
 #include <Geode/loader/Log.hpp>
 #include <Geode/loader/Mod.hpp>
 #include <Geode/Geode.hpp>
 #include <Geode/ui/Notification.hpp>
+#include <sstream>
 
 using namespace geode::prelude;
 
 namespace mpedit {
+
+    PlayerAppearance parsePlayerAppearance(std::string const& iconStr) {
+        PlayerAppearance app;
+        if (iconStr.empty()) return app;
+
+        std::stringstream ss(iconStr);
+        std::string token;
+        std::vector<std::string> tokens;
+        while (std::getline(ss, token, ':')) {
+            tokens.push_back(token);
+        }
+
+        if (tokens.size() >= 5) {
+            app.cubeFrame = geode::utils::numFromString<int>(tokens[0]).unwrapOr(1);
+            app.col1 = geode::utils::numFromString<int>(tokens[1]).unwrapOr(0);
+            app.col2 = geode::utils::numFromString<int>(tokens[2]).unwrapOr(0);
+            app.glow = (tokens[3] == "1");
+            app.glowCol = geode::utils::numFromString<int>(tokens[4]).unwrapOr(0);
+        }
+        if (tokens.size() >= 7) {
+            app.waveFrame = geode::utils::numFromString<int>(tokens[5]).unwrapOr(1);
+            app.cursorType = geode::utils::numFromString<int>(tokens[6]).unwrapOr(0);
+        }
+        return app;
+    }
+
+    cocos2d::ccColor3B getPlayerEffectiveColor(int colorIndex, std::string const& iconStr) {
+        auto app = parsePlayerAppearance(iconStr);
+        if (app.cursorType == 0) {
+            if (auto gm = GameManager::sharedState()) {
+                return gm->colorForIdx(app.col1);
+            }
+        }
+        return ColorPalette::getColor(colorIndex);
+    }
+
+    int getLocalSavedCursorType() {
+        return Mod::get()->getSavedValue<int>("cursor-type", 0);
+    }
+
+    int getLocalSavedCursorColor() {
+        return Mod::get()->getSavedValue<int>("cursor-color", 0);
+    }
+
+    std::string buildLocalIconStr() {
+        auto* gm = GameManager::sharedState();
+        if (!gm) return "";
+        int cube = gm->getPlayerFrame();
+        int c1 = gm->getPlayerColor();
+        int c2 = gm->getPlayerColor2();
+        int glow = gm->getPlayerGlow() ? 1 : 0;
+        int glowCol = gm->getPlayerGlowColor();
+        int wave = gm->getPlayerDart();
+        int cursorType = getLocalSavedCursorType();
+        return fmt::format("{}:{}:{}:{}:{}:{}:{}", cube, c1, c2, glow, glowCol, wave, cursorType);
+    }
 
     SessionManager& SessionManager::get() {
         static SessionManager instance;
@@ -319,10 +377,8 @@ namespace mpedit {
             PlayerInfo self;
             self.id = localPlayerId;
             self.name = m_localPlayerName;
-            self.colorIndex = (localPlayerId == 0) ? 0 : (localPlayerId % 6);
-            if (auto gm = GameManager::sharedState()) {
-                self.iconStr = fmt::format("{}:{}:{}:{}:{}", gm->getPlayerFrame(), gm->getPlayerColor(), gm->getPlayerColor2(), gm->getPlayerGlow() ? 1 : 0, gm->getPlayerGlowColor());
-            }
+            self.colorIndex = getLocalSavedCursorColor();
+            self.iconStr = buildLocalIconStr();
             m_players.push_back(self);
 
             auto callbacks = m_onSessionStarted;
@@ -574,6 +630,25 @@ namespace mpedit {
         P2PManager::get().clearHandlers();
         P2PManager::get().clearCallbacks();
         RemoteActionHandler::get().clearHandlers();
+    }
+
+    void SessionManager::updateLocalAppearance(int cursorType, int colorIndex) {
+        Mod::get()->setSavedValue<int>("cursor-type", cursorType);
+        Mod::get()->setSavedValue<int>("cursor-color", colorIndex);
+
+        if (!isInSession()) return;
+
+        std::string newIconStr = buildLocalIconStr();
+        for (auto& p : m_players) {
+            if (p.id == m_localPlayerId) {
+                p.colorIndex = colorIndex;
+                p.iconStr = newIconStr;
+                break;
+            }
+        }
+
+        auto msg = proto::serializePlayerJoined(m_localPlayerId, m_localPlayerName, colorIndex, newIconStr);
+        P2PManager::get().send(std::move(msg), ChannelType::Reliable);
     }
 
 }

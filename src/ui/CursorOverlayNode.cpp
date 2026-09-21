@@ -1,6 +1,7 @@
 #include "CursorOverlayNode.hpp"
 #include "CursorNode.hpp"
 #include "../SessionManager.hpp"
+#include "../utils/ColorPalette.hpp"
 #include <Geode/Geode.hpp>
 #include <cmath>
 #include <algorithm>
@@ -97,9 +98,9 @@ namespace mpedit {
             list.erase(list.begin());
         }
 
-        auto color3 = CursorNode::getColorForIndex(0);
+        auto color3 = ColorPalette::getColor(0);
         if (auto* p = SessionManager::get().getPlayer(playerId)) {
-            color3 = CursorNode::getColorForIndex(p->colorIndex);
+            color3 = getPlayerEffectiveColor(p->colorIndex, p->iconStr);
         }
 
         BubbleItem item;
@@ -214,7 +215,7 @@ namespace mpedit {
                     ind.root = cocos2d::CCNode::create();
                     this->addChild(ind.root, 10);
 
-                    auto color3 = CursorNode::getColorForIndex(player.colorIndex);
+                    auto color3 = getPlayerEffectiveColor(player.colorIndex, player.iconStr);
                     ind.color = color3;
 
                     ind.sonarPing = cocos2d::CCDrawNode::create();

@@ -10,7 +10,9 @@
 #include <Geode/utils/web.hpp>
 #include <Geode/utils/file.hpp>
 #include "DedicatedServersPopup.hpp"
+#include "AppearancePopup.hpp"
 #include "ChatPopup.hpp"
+#include "../../utils/ColorPalette.hpp"
 #include "../../RevertManager.hpp"
 #include <Geode/binding/Slider.hpp>
 #include <Geode/binding/CCMenuItemToggler.hpp>
@@ -1980,6 +1982,12 @@ namespace mpedit {
         serversBtnSprite->setScale(0.65f);
         auto serversBtn = CCMenuItemSpriteExtra::create(serversBtnSprite, this, menu_selector(MultiplayerMenuPopup::onDedicatedServers));
         m_leftMenu->addChild(serversBtn);
+
+        auto appearanceBtnSprite = ButtonSprite::create("Appearance", "goldFont.fnt", "GJ_button_01.png", 0.7f);
+        appearanceBtnSprite->setScale(0.65f);
+        auto appearanceBtn = CCMenuItemSpriteExtra::create(appearanceBtnSprite, this, menu_selector(MultiplayerMenuPopup::onCustomizeAppearance));
+        m_leftMenu->addChild(appearanceBtn);
+
         m_leftMenu->updateLayout();
     }
 
@@ -2220,6 +2228,15 @@ namespace mpedit {
         copyBtn->setPosition(copyMenu->getContentSize() / 2.f);
         copyMenu->addChild(copyBtn);
         topRow->addChild(copyMenu);
+
+        auto customSprite = ButtonSprite::create("Appearance", "goldFont.fnt", "GJ_button_04.png", 0.8f);
+        customSprite->setScale(0.45f);
+        auto customBtn = CCMenuItemSpriteExtra::create(customSprite, this, menu_selector(MultiplayerMenuPopup::onCustomizeAppearance));
+        auto customMenu = CCMenu::create();
+        customMenu->setContentSize(customBtn->getScaledContentSize());
+        customBtn->setPosition(customMenu->getContentSize() / 2.f);
+        customMenu->addChild(customBtn);
+        topRow->addChild(customMenu);
         
         topRow->updateLayout();
 
@@ -2249,17 +2266,8 @@ namespace mpedit {
         borders->setPosition({w / 2.f, 5.f + scrollHeight / 2.f});
         m_centerNode->addChild(borders);
 
-        static const std::array<ccColor3B, 6> playerColors = {
-            ccColor3B{100, 200, 255},
-            ccColor3B{255, 120, 100},
-            ccColor3B{100, 255, 150},
-            ccColor3B{255, 200, 100},
-            ccColor3B{200, 150, 255},
-            ccColor3B{255, 150, 200},
-        };
-
         for (auto& p : players) {
-            auto cell = ActivePlayerCell::create(p, m_scrollLayer->getContentSize().width, playerColors[p.colorIndex % playerColors.size()]);
+            auto cell = ActivePlayerCell::create(p, m_scrollLayer->getContentSize().width, getPlayerEffectiveColor(p.colorIndex, p.iconStr));
             m_scrollLayer->m_contentLayer->addChild(cell);
         }
 
@@ -2449,6 +2457,10 @@ namespace mpedit {
     void MultiplayerMenuPopup::onCopyCode(CCObject*) {
         geode::utils::clipboard::write(SessionManager::get().getRoomCode());
         geode::Notification::create("Copied!", CCSprite::createWithSpriteFrameName("GJ_completesIcon_001.png"))->show();
+    }
+
+    void MultiplayerMenuPopup::onCustomizeAppearance(CCObject*) {
+        AppearancePopup::create()->show();
     }
 
     void MultiplayerMenuPopup::onJoinRoom(P2PManager::RoomInfo const& room) {

@@ -1,4 +1,5 @@
 #include "P2PManager.hpp"
+#include "SessionManager.hpp"
 #include "utils/ChatFilter.hpp"
 #include "BinaryProtocol.hpp"
 #include "RemoteActionHandler.hpp"
@@ -309,6 +310,19 @@ namespace mpedit {
             if (opcode == static_cast<uint8_t>(proto::Opcode::Heartbeat) ||
                 opcode == static_cast<uint8_t>(proto::Opcode::Ping) ||
                 opcode == static_cast<uint8_t>(proto::Opcode::Pong)) return;
+
+            if (opcode == static_cast<uint8_t>(proto::Opcode::PlayerJoined) && len > 1) {
+                proto::Reader r(data + 1, len - 1);
+                auto pj = proto::deserializePlayerJoined(r);
+                {
+                    std::lock_guard lock(m_peersMutex);
+                    auto it = m_peers.find(fromPlayerId);
+                    if (it != m_peers.end()) {
+                        it->second.colorIndex = pj.colorIndex;
+                        it->second.iconStr = pj.iconStr;
+                    }
+                }
+            }
 
             ChannelType ch = ChannelType::Reliable;
             if (opcode == static_cast<uint8_t>(proto::Opcode::CursorUpdate) ||
@@ -625,6 +639,7 @@ namespace mpedit {
                 int clientId = msg.get<int>("playerId").unwrapOr(-1);
                 auto clientName = msg.get<std::string>("playerName").unwrapOr("Player " + std::to_string(clientId));
                 auto iconStr = msg.get<std::string>("iconStr").unwrapOr("");
+                int colorIdx = msg.get<int>("colorIndex").unwrapOr(clientId % 16);
                 if (clientId >= 0) {
                     log::info("P2PManager: Client {} ({}) connecting via signal poll", clientId, clientName);
                     
@@ -643,7 +658,7 @@ namespace mpedit {
                         sendSignalingMessage(m_roomCode, errBody);
                     } else {
                         m_nextPlayerId = std::max(m_nextPlayerId, clientId + 1);
-                        createHostPeer(clientId, clientName, iconStr);
+                        createHostPeer(clientId, clientName, iconStr, colorIdx);
                     }
                 }
             } else if (type == "answer") {
@@ -796,7 +811,8 @@ namespace mpedit {
             {"action", "join"},
             {"roomCode", roomCode},
             {"playerName", playerName},
-            {"iconStr", fmt::format("{}:{}:{}:{}:{}", GameManager::sharedState()->getPlayerFrame(), GameManager::sharedState()->getPlayerColor(), GameManager::sharedState()->getPlayerColor2(), GameManager::sharedState()->getPlayerGlow() ? 1 : 0, GameManager::sharedState()->getPlayerGlowColor())}
+            {"iconStr", buildLocalIconStr()},
+            {"colorIndex", getLocalSavedCursorColor()}
         });
         if (password != "") {
             body.set("password", password);
@@ -1111,11 +1127,7 @@ namespace mpedit {
                 
                 m_state.store(State::Connected);
 
-                std::string iconStr = "";
-                if (auto gm = GameManager::sharedState()) {
-                    iconStr = fmt::format("{}:{}:{}:{}:{}", gm->getPlayerFrame(), gm->getPlayerColor(), gm->getPlayerColor2(), gm->getPlayerGlow() ? 1 : 0, gm->getPlayerGlowColor());
-                }
-                auto handshake = proto::serializePlayerJoined(0, m_localPlayerName, 0, iconStr);
+                auto handshake = proto::serializePlayerJoined(0, m_localPlayerName, getLocalSavedCursorColor(), buildLocalIconStr());
                 try {
                     m_webSocket->send(reinterpret_cast<const std::byte*>(handshake.data()), handshake.size());
                 } catch (std::exception const& e) {
@@ -1159,7 +1171,7 @@ namespace mpedit {
     }
 
 
-    void P2PManager::createHostPeer(int clientPlayerId, std::string const& clientName, std::string const& iconStr) {
+    void P2PManager::createHostPeer(int clientPlayerId, std::string const& clientName, std::string const& iconStr, int colorIndex) {
         auto pc = std::make_shared<rtc::PeerConnection>(makeRtcConfig());
 
         auto reliable = pc->createDataChannel("reliable");
@@ -1174,7 +1186,7 @@ namespace mpedit {
         peer.unreliable = unreliable;
         peer.playerId = clientPlayerId;
         peer.playerName = clientName;
-        peer.colorIndex = clientPlayerId % 6;
+        peer.colorIndex = (colorIndex >= 0) ? colorIndex : (clientPlayerId % 16);
         peer.iconStr = iconStr;
 
         auto setupChannelCallbacks = [this, clientPlayerId](std::shared_ptr<rtc::DataChannel> dc, bool isReliable) {
@@ -1367,11 +1379,7 @@ namespace mpedit {
             }
 
             if (m_role == Role::Client && pid == 0) {
-                std::string myIconStr = "";
-                if (auto gm = GameManager::sharedState()) {
-                    myIconStr = fmt::format("{}:{}:{}:{}:{}", gm->getPlayerFrame(), gm->getPlayerColor(), gm->getPlayerColor2(), gm->getPlayerGlow() ? 1 : 0, gm->getPlayerGlowColor());
-                }
-                auto myMsg = proto::serializePlayerJoined(m_localPlayerId, m_localPlayerName, m_localPlayerId % 6, myIconStr);
+                auto myMsg = proto::serializePlayerJoined(m_localPlayerId, m_localPlayerName, getLocalSavedCursorColor(), buildLocalIconStr());
                 sendTo(0, myMsg, ChannelType::Reliable);
             }
 
@@ -1395,11 +1403,7 @@ namespace mpedit {
                     sendTo(pid, peerMsg, ChannelType::Reliable);
                 }
                 
-                std::string hostIconStr = "";
-                if (auto gm = GameManager::sharedState()) {
-                    hostIconStr = fmt::format("{}:{}:{}:{}:{}", gm->getPlayerFrame(), gm->getPlayerColor(), gm->getPlayerColor2(), gm->getPlayerGlow() ? 1 : 0, gm->getPlayerGlowColor());
-                }
-                auto hostMsg = proto::serializePlayerJoined(0, m_localPlayerName, 0, hostIconStr);
+                auto hostMsg = proto::serializePlayerJoined(0, m_localPlayerName, getLocalSavedCursorColor(), buildLocalIconStr());
                 sendTo(pid, hostMsg, ChannelType::Reliable);
             }
         });

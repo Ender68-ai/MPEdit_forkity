@@ -1,5 +1,6 @@
 #include "ChatPopup.hpp"
 #include "../../SessionManager.hpp"
+#include "../../utils/ColorPalette.hpp"
 #include <Geode/ui/ScrollLayer.hpp>
 #include <Geode/binding/SimplePlayer.hpp>
 
@@ -7,17 +8,8 @@ using namespace geode::prelude;
 
 namespace mpedit {
 
-    
     static cocos2d::ccColor3B getColorForIndex(int index) {
-        static const cocos2d::ccColor3B colors[] = {
-            {100, 200, 255}, 
-            {255, 120, 100}, 
-            {100, 255, 150}, 
-            {255, 200, 100}, 
-            {200, 150, 255}, 
-            {255, 150, 200}  
-        };
-        return colors[index % 6];
+        return ColorPalette::getColor(index);
     }
 
     bool ChatPopup::setup() {
@@ -80,8 +72,7 @@ namespace mpedit {
         for (auto& msg : history) {
             auto cell = cocos2d::CCNode::create();
             auto* pInfo = SessionManager::get().getPlayer(msg.playerId);
-            int colorIndex = pInfo ? pInfo->colorIndex : 0;
-            cocos2d::ccColor3B pColor = getColorForIndex(colorIndex);
+            cocos2d::ccColor3B pColor = pInfo ? getPlayerEffectiveColor(pInfo->colorIndex, pInfo->iconStr) : ColorPalette::getColor(0);
             
             int cubeFrame = 1;
             cocos2d::ccColor3B col1 = pColor;

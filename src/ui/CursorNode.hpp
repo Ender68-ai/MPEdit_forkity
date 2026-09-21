@@ -19,6 +19,7 @@ namespace mpedit {
             SimplePlayer* playtestInnerCube = nullptr;
             SimplePlayer* playtestIcon2 = nullptr;
             SimplePlayer* playtestInnerCube2 = nullptr;
+            SimplePlayer* waveCursor = nullptr;
             cocos2d::CCSprite* lockIcon = nullptr;
             std::string lastStatus;
             float targetX = 0.f;
@@ -38,6 +39,7 @@ namespace mpedit {
         static CursorNode* create();
         
         static cocos2d::ccColor3B getColorForIndex(int index);
+        static void drawCursor(cocos2d::CCDrawNode* node, int cursorType, cocos2d::ccColor3B color);
     };
 
 } 

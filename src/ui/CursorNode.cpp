@@ -1,6 +1,7 @@
 #include "CursorNode.hpp"
 #include <Geode/Geode.hpp>
 #include "../RemoteActionHandler.hpp"
+#include "../utils/ColorPalette.hpp"
 #include <sstream>
 
 using namespace geode::prelude;
@@ -18,15 +19,55 @@ namespace mpedit {
     }
 
     ccColor3B CursorNode::getColorForIndex(int index) {
-        static const std::array<ccColor3B, 6> colors = {
-            ccColor3B{100, 200, 255},
-            ccColor3B{255, 120, 100},
-            ccColor3B{100, 255, 150},
-            ccColor3B{255, 200, 100},
-            ccColor3B{200, 150, 255},
-            ccColor3B{255, 150, 200},
-        };
-        return colors[index % colors.size()];
+        return ColorPalette::getColor(index);
+    }
+
+    void CursorNode::drawCursor(cocos2d::CCDrawNode* node, int cursorType, cocos2d::ccColor3B color) {
+        if (!node) return;
+        node->clear();
+
+        cocos2d::ccColor4F color4 = {color.r / 255.f, color.g / 255.f, color.b / 255.f, 1.0f};
+        cocos2d::ccColor4F black = {0.0f, 0.0f, 0.0f, 1.0f};
+
+        if (cursorType == 2) {
+            node->drawSegment({-8.5f, 0.0f}, {-2.5f, 0.0f}, 2.0f, black);
+            node->drawSegment({2.5f, 0.0f}, {8.5f, 0.0f}, 2.0f, black);
+            node->drawSegment({0.0f, -8.5f}, {0.0f, -2.5f}, 2.0f, black);
+            node->drawSegment({0.0f, 2.5f}, {0.0f, 8.5f}, 2.0f, black);
+
+            node->drawSegment({-8.5f, 0.0f}, {-2.5f, 0.0f}, 1.2f, color4);
+            node->drawSegment({2.5f, 0.0f}, {8.5f, 0.0f}, 1.2f, color4);
+            node->drawSegment({0.0f, -8.5f}, {0.0f, -2.5f}, 1.2f, color4);
+            node->drawSegment({0.0f, 2.5f}, {0.0f, 8.5f}, 1.2f, color4);
+        } else if (cursorType == 3) {
+            node->drawDot({0.0f, 0.0f}, 4.5f, black);
+            node->drawDot({0.0f, 0.0f}, 3.3f, color4);
+        } else if (cursorType == 4) {
+            cocos2d::CCPoint verts[] = {
+                {0.0f, 0.0f},
+                {13.0f, -4.5f},
+                {9.5f, -8.0f},
+                {4.0f, -4.0f},
+                {8.0f, -9.5f},
+                {4.5f, -13.0f}
+            };
+            node->drawPolygon(verts, 6, color4, 1.0f, black);
+        } else if (cursorType == 5) {
+            cocos2d::CCPoint verts[] = {
+                {0.0f, 0.0f},
+                {14.0f, -4.0f},
+                {4.0f, -14.0f}
+            };
+            node->drawPolygon(verts, 3, color4, 1.0f, black);
+        } else {
+            cocos2d::CCPoint verts[] = {
+                {0.0f, 0.0f},
+                {0.0f, -17.8f},
+                {5.7f, -13.3f},
+                {12.9f, -13.1f}
+            };
+            node->drawPolygon(verts, 4, color4, 1.0f, black);
+        }
     }
 
     CursorNode::~CursorNode() {
@@ -75,20 +116,9 @@ namespace mpedit {
                 pc.lockIcon = nullptr;
                 
                 pc.drawNode = CCDrawNode::create();
-                
-                cocos2d::CCPoint verts[] = {
-                    {0.0f, 0.0f},
-                    {0.0f, -17.8f},
-                    {5.7f, -13.3f},
-                    {12.9f, -13.1f}
-                };
-                
-                auto color3 = getColorForIndex(player.colorIndex);
-                cocos2d::ccColor4F color4 = {color3.r / 255.f, color3.g / 255.f, color3.b / 255.f, 0.9f};
-                cocos2d::ccColor4F outline = {0.f, 0.f, 0.f, 1.f};
-                
-                pc.drawNode->drawPolygon(verts, 4, color4, 1.0f, outline);
                 this->addChild(pc.drawNode);
+
+                auto color3 = getPlayerEffectiveColor(player.colorIndex, player.iconStr);
 
                 pc.label = CCLabelBMFont::create(player.name.c_str(), "chatFont.fnt");
                 if (player.id == localId) {
@@ -319,6 +349,9 @@ namespace mpedit {
 
             if (isPlaytesting) {
                 pc.drawNode->setVisible(false);
+                if (pc.waveCursor) {
+                    pc.waveCursor->setVisible(false);
+                }
                 if (pc.toolIndicator) {
                     pc.toolIndicator->setVisible(false);
                 }
@@ -492,8 +525,46 @@ namespace mpedit {
                 bool isLocal = (player.id == localId);
                 bool showCursors = geode::Mod::get()->getSettingValue<bool>("show-cursors");
                 bool isVisible = !isLocal && showCursors;
-                pc.drawNode->setVisible(isVisible);
+
+                auto color3 = getPlayerEffectiveColor(player.colorIndex, player.iconStr);
+                auto app = parsePlayerAppearance(player.iconStr);
+
+                if (app.cursorType == 0) {
+                    pc.drawNode->setVisible(false);
+                    if (!pc.waveCursor) {
+                        pc.waveCursor = SimplePlayer::create(app.waveFrame);
+                        this->addChild(pc.waveCursor);
+                    }
+                    pc.waveCursor->setVisible(isVisible);
+                    if (isVisible) {
+                        pc.waveCursor->updatePlayerFrame(app.waveFrame, IconType::Wave);
+                        auto* gm = GameManager::sharedState();
+                        if (gm) {
+                            auto c1 = gm->colorForIdx(app.col1);
+                            auto c2 = gm->colorForIdx(app.col2);
+                            pc.waveCursor->setColors(c1, c2);
+                            if (app.glow) {
+                                pc.waveCursor->setGlowOutline(gm->colorForIdx(app.glowCol));
+                            } else {
+                                pc.waveCursor->disableGlowOutline();
+                            }
+                        }
+                        pc.waveCursor->setScale(1.0f);
+                        pc.waveCursor->setRotation(-135.f);
+                        pc.waveCursor->setPosition({newX + 11.f, newY - 11.f});
+                    }
+                } else {
+                    if (pc.waveCursor) {
+                        pc.waveCursor->setVisible(false);
+                    }
+                    pc.drawNode->setVisible(isVisible);
+                    if (isVisible) {
+                        CursorNode::drawCursor(pc.drawNode, app.cursorType, color3);
+                    }
+                }
+
                 pc.label->setVisible(isVisible);
+                pc.label->setColor(color3);
                 if (pc.toolIndicator) {
                     pc.toolIndicator->setVisible(isVisible);
                 }
@@ -504,7 +575,15 @@ namespace mpedit {
                     pc.playtestIcon2->setVisible(false);
                 }
                 pc.label->setAnchorPoint({0.f, 0.5f});
-                pc.label->setPosition({newX + 15.f, newY - 15.f});
+                if (app.cursorType == 0) {
+                    pc.label->setPosition({newX + 25.f, newY - 15.f});
+                } else if (app.cursorType == 2) {
+                    pc.label->setPosition({newX + 12.f, newY - 12.f});
+                } else if (app.cursorType == 3) {
+                    pc.label->setPosition({newX + 10.f, newY - 10.f});
+                } else {
+                    pc.label->setPosition({newX + 15.f, newY - 15.f});
+                }
             }
 
             if (pc.toolIndicator && !isPlaytesting) {
@@ -526,7 +605,7 @@ namespace mpedit {
             cocos2d::ccColor3B color3 = {255, 0, 0};
             auto* player = session.getPlayer(lockInfo.playerId);
             if (player) {
-                color3 = getColorForIndex(player->colorIndex);
+                color3 = getPlayerEffectiveColor(player->colorIndex, player->iconStr);
             }
             
             ccBlendFunc blend = {GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA};
@@ -553,6 +632,7 @@ namespace mpedit {
                 if (it->second.toolIndicator) it->second.toolIndicator->removeFromParent();
                 if (it->second.playtestIcon) it->second.playtestIcon->removeFromParent();
                 if (it->second.playtestIcon2) it->second.playtestIcon2->removeFromParent();
+                if (it->second.waveCursor) it->second.waveCursor->removeFromParent();
                 if (it->second.lockIcon) it->second.lockIcon->removeFromParent();
 
                 it = m_cursors.erase(it);

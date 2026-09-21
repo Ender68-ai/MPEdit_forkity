@@ -1,13 +1,15 @@
 #include <Geode/Geode.hpp>
-#include <Geode/loader/SettingV3.hpp>
 #include "SessionManager.hpp"
 #include "P2PManager.hpp"
 #include "RemoteActionHandler.hpp"
+#include "ui/settings/AppearanceSetting.hpp"
 
 using namespace geode::prelude;
 
 $on_mod(Loaded) {
     log::info("Multiplayer Edit v{} loaded!", Mod::get()->getVersion().toNonVString());
+
+    (void)Mod::get()->registerCustomSettingType("appearance", &mpedit::AppearanceSettingV3::parse);
 }
 
 $on_mod(DataSaved) {
@@ -16,4 +18,5 @@ $on_mod(DataSaved) {
         session.leaveSession();
     }
 }
+
 // scientists reveal the hi

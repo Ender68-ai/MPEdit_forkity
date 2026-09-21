@@ -49,6 +49,7 @@ namespace mpedit {
         void onCopyCode(cocos2d::CCObject*);
         void onJoinByCode(cocos2d::CCObject*);
         void onDedicatedServers(cocos2d::CCObject*);
+        void onCustomizeAppearance(cocos2d::CCObject*);
         void onDisconnectedPlayers(cocos2d::CCObject*);
         void onRollback(cocos2d::CCObject*);
         void onHeaderUpdate(cocos2d::CCObject*);

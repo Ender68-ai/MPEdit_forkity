@@ -1,9 +1,10 @@
 # 0.7.0
-- AUTOMATIC MOD UPDATES! You can now update the mod completley in-game, no need to manually replace the .geode file for every update!
-- ANTI GRIEFING FEATURES! Hosts can now revert any player's changes from the player list.
+- Automatic Mod Updates! You can now update the mod completley in-game, no need to manually replace the .geode file for every update!
+- Cursor Customization! You can now change your cursors look and color. You can do this in the mod settings.
+- Anti Griefing Features! Hosts can now revert any player's changes from the player list.
 - Added a "Recent" players menu so hosts can still ban and revert griefers even after they leave the session.
 - Added a "Level Timeline" menu allowing hosts to view the history of the level and roll back (or forward) changes to any point in time. 
-- The timeline also branches, so making changes to an older version of the level creates a separate branch instead of overwriting.
+- The level timeline also branches, so making changes to an older version of the level creates a separate branch instead of overwriting.
 - Added free public TURN servers so users with strict firewalls or blocked ISPs can still connect to each other if standard P2P doesn't work.
 - Shows indicator on player list showing whether players are connected via "STUN", "TURN", "LAN", or "SERVER".
 - Added funny flavor text when trying to join a host. Can be toggled in the mod settings.

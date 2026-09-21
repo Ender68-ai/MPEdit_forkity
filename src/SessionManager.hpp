@@ -3,8 +3,26 @@
 #include <string>
 #include <vector>
 #include <functional>
+#include <chrono>
+#include <cocos2d.h>
 
 namespace mpedit {
+
+    struct PlayerAppearance {
+        int cubeFrame = 1;
+        int col1 = 0;
+        int col2 = 0;
+        bool glow = false;
+        int glowCol = 0;
+        int waveFrame = 1;
+        int cursorType = 0;
+    };
+
+    PlayerAppearance parsePlayerAppearance(std::string const& iconStr);
+    cocos2d::ccColor3B getPlayerEffectiveColor(int colorIndex, std::string const& iconStr);
+    std::string buildLocalIconStr();
+    int getLocalSavedCursorType();
+    int getLocalSavedCursorColor();
 
     struct PlayerInfo {
         int id = -1;
@@ -76,6 +94,7 @@ namespace mpedit {
         void removeDisconnectedPlayer(std::string const& name);
         PlayerInfo const* getPlayer(int id) const;
         void updatePlayerCursor(int playerId, float x, float y, std::string const& status);
+        void updateLocalAppearance(int cursorType, int colorIndex);
 
         using SessionCallback = std::function<void()>;
         using PlayerCallback = std::function<void(PlayerInfo const&)>;

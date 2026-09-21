@@ -54,6 +54,11 @@
             "type": "title",
             "name": "Display"
         },
+        "customize-appearance": {
+            "type": "custom:appearance",
+            "name": "Cursor Customization",
+            "description": "Customize your editor cursor style and multiplayer color."
+        },
         "show-cursors": {
             "type": "bool",
             "name": "Show Player Cursors",
