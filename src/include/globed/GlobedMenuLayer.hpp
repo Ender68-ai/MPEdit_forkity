@@ -1,0 +1,103 @@
+#pragma once
+
+#include "include/globed/prelude.hpp"
+#include "include/globed/core/net/MessageListener.hpp"
+#include "include/globed/core/net/NetworkManager.hpp"
+#include "include/globed/core/data/Messages.hpp"
+#include "include/globed/BaseLayer.hpp"
+
+#include <Geode/Geode.hpp>
+#include <cue/ListNode.hpp>
+#include <asp/time/Instant.hpp>
+#include "../advancedlabel/include/AdvancedLabel.hpp"
+
+namespace globed {
+
+enum class MenuState {
+    None,
+    Disconnected,
+    Connecting,
+    Connected
+};
+
+class GlobedMenuLayer : public BaseLayer {
+public:
+    static GlobedMenuLayer* create();
+
+    void onServerModified();
+
+    
+private:
+    CCMenu* m_connectMenu;
+    geode::NineSlice* m_connectMenuBg;
+    geode::Button* m_editServerButton;
+    CCLabelBMFont* m_serverNameLabel;
+    geode::Button* m_connectButton;
+    CCLabelBMFont* m_connStateLabel;
+    CCNode* m_connStateContainer;
+    geode::Button* m_cancelConnButton;
+    MenuState m_state = MenuState::None;
+    ConnectionState m_lastConnState;
+
+    CCNode* m_playerListMenu;
+    cue::ListNode* m_playerList;
+    Label* m_roomNameLabel;
+    Label* m_preferredServerLabel;
+    geode::Button* m_roomNameButton;
+    CCMenu* m_roomButtonsMenu;
+    CCMenu* m_rightSideMenu = nullptr;
+    CCMenu* m_leftSideMenu = nullptr;
+    CCMenu* m_farLeftMenu = nullptr;
+    CCMenu* m_farRightMenu = nullptr;
+    geode::Button* m_searchBtn = nullptr;
+    geode::Button* m_clearSearchBtn = nullptr;
+    MessageListener<msg::RoomStateMessage> m_roomStateListener;
+    MessageListener<msg::RoomPlayersMessage> m_roomPlayersListener;
+    MessageListener<msg::PinnedLevelUpdatedMessage> m_pinnedListener;
+    MessageListener<msg::UserDataChangedMessage> m_userChangedListener;
+    MessageListener<msg::AdminPunishmentReasonsMessage> m_adminResultListener;
+    MessageListener<msg::RoomSettingsUpdatedMessage> m_roomSettingsListener;
+    uint32_t m_roomId = -1;
+    size_t m_playerCount = 0;
+    std::optional<asp::time::Instant> m_lastRoomUpdate;
+    std::optional<asp::time::Instant> m_lastInteraction;
+    std::optional<cue::ScrollPos> m_lastScrollPos;
+    std::string m_curFilter;
+    float m_autoRefreshCounter = 0.f;
+    bool m_hardRefresh = false;
+    bool m_interacting = false;
+
+    bool init() override;
+    void update(float dt) override;
+    void setMenuState(MenuState state, bool force = false);
+
+    void keyDown(cocos2d::enumKeyCodes key, double timestamp) override;
+    void handleDebugKey(cocos2d::enumKeyCodes key);
+    void keyBackClicked() override;
+    void onEnter() override;
+    bool ccTouchBegan(cocos2d::CCTouch* touch, cocos2d::CCEvent* event) override;
+    void ccTouchEnded(cocos2d::CCTouch* touch, cocos2d::CCEvent* event) override;
+
+    void initNewRoom(uint32_t id, const std::string& name, const std::vector<RoomPlayer>& players, size_t playerCount, const RoomSettings& settings);
+    void updateRoom(uint32_t id, const std::string& name, const std::vector<RoomPlayer>& players, size_t playerCount, const RoomSettings& settings);
+    void updatePlayerList(const std::vector<RoomPlayer>& players);
+    void updatePreferredServerLabel(bool connected);
+    bool trySoftRefresh(const std::vector<RoomPlayer>& players);
+    void softRefreshAll();
+    void softRefreshSelf();
+    void initRoomButtons();
+    void initSideButtons();
+    void initFarSideButtons();
+    void copyRoomIdToClipboard();
+    void requestRoomState();
+    bool shouldAutoRefresh(float dt);
+    std::vector<geode::Ref<geode::Button>> createCommonButtons(bool loggedIn);
+    void reloadWithFilter(const std::string& filter);
+
+    void addPinnedLevelCell();
+    void removePinnedLevelCell();
+
+    void onSettings();
+};
+
+}

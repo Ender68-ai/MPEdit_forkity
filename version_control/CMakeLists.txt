@@ -1,0 +1,74 @@
+cmake_minimum_required(VERSION 3.21)
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+if ("${CMAKE_SYSTEM_NAME}" STREQUAL "iOS" OR IOS)
+    set(CMAKE_OSX_ARCHITECTURES "arm64")
+else()
+    set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64")
+endif()
+set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+
+project(GitEditor VERSION 1.0.0 LANGUAGES C CXX)
+
+file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS src/*.cpp)
+
+add_library(sqlite3 STATIC src/sqlite/sqlite3.c)
+target_include_directories(sqlite3 PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/sqlite)
+target_compile_definitions(sqlite3 PRIVATE
+    SQLITE_THREADSAFE=1
+    SQLITE_DEFAULT_MEMSTATUS=0
+    SQLITE_MAX_LENGTH=1000000000
+    SQLITE_DQS=0
+    SQLITE_OMIT_LOAD_EXTENSION
+    SQLITE_OMIT_DEPRECATED
+)
+set_target_properties(sqlite3 PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+add_library(${PROJECT_NAME} SHARED ${SOURCES})
+target_include_directories(${PROJECT_NAME} PRIVATE src)
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    GIT_EDITOR_SQLITE_MAX_LENGTH=1000000000
+)
+target_link_libraries(${PROJECT_NAME} sqlite3)
+
+set_target_properties(${PROJECT_NAME} PROPERTIES
+    UNITY_BUILD ON
+    UNITY_BUILD_BATCH_SIZE 12
+)
+
+if(MSVC)
+    target_compile_options(${PROJECT_NAME} PRIVATE /MP)
+endif()
+
+if (NOT DEFINED ENV{GEODE_SDK})
+    message(FATAL_ERROR "Unable to find Geode SDK! Please define GEODE_SDK environment variable to point to Geode")
+else()
+    message(STATUS "Found Geode: $ENV{GEODE_SDK}")
+endif()
+
+add_subdirectory($ENV{GEODE_SDK} ${CMAKE_CURRENT_BINARY_DIR}/geode)
+
+find_package(ZLIB CONFIG QUIET)
+if(NOT ZLIB_FOUND)
+    find_package(ZLIB QUIET)
+endif()
+if(TARGET ZLIB::ZLIB)
+    target_link_libraries(${PROJECT_NAME} ZLIB::ZLIB)
+else()
+    include(FetchContent)
+    FetchContent_Declare(
+        zlib
+        GIT_REPOSITORY https://github.com/madler/zlib.git
+        GIT_TAG v1.3.2
+    )
+    set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(ZLIB_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(zlib)
+    if(TARGET zlibstatic)
+        set_target_properties(zlibstatic PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    endif()
+    target_link_libraries(${PROJECT_NAME} zlibstatic)
+endif()
+
+setup_geode_mod(${PROJECT_NAME})

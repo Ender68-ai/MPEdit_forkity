@@ -15,8 +15,6 @@
 #include "ActionSerializer.hpp"
 #include "RemoteActionHandler.hpp"
 #include "RevertManager.hpp"
-#include "ui/menu/MultiplayerMenuPopup.hpp"
-#include "ui/menu/CreateRoomPopup.hpp"
 #include "ui/QuickChatPopup.hpp"
 
 #include "ui/SessionStatusNode.hpp"
@@ -131,6 +129,7 @@ class $modify(MPEditorPauseLayer, EditorPauseLayer) {
     }
 
     void onSaveLocal(CCObject* sender) {
+        // First, call original saveLevel to generate the level string properly
         EditorPauseLayer::saveLevel();
         auto* editor = LevelEditorLayer::get();
         if (editor && editor->m_level) {
@@ -147,15 +146,10 @@ class $modify(MPEditorPauseLayer, EditorPauseLayer) {
     }
 
     void onMultiplayer(CCObject*) {
-        MultiplayerMenuPopup::checkUpdatesAndPatreon();
         if (SessionManager::get().isInSession()) {
-            if (auto* popup = MultiplayerMenuPopup::create()) {
-                popup->show();
-            }
+            MultiplayerMenuPopup::create()->show();
         } else {
-            if (auto* popup = CreateRoomPopup::create(nullptr)) {
-                popup->show();
-            }
+            CreateRoomPopup::create(nullptr)->show();
         }
     }
 
@@ -209,6 +203,7 @@ class $modify(MPEditorPauseLayer, EditorPauseLayer) {
                 loadingCircle->setParentLayer(this);
                 loadingCircle->show();
 
+                // Keep this layer alive in case of rapid clicks, though loading circle blocks touches
                 this->retain(); 
                 RemoteActionHandler::get().sendSnapshotToServer([this, sender, loadingCircle]() {
                     loadingCircle->fadeAndRemove();
@@ -267,7 +262,6 @@ class $modify(MPLevelBrowserLayer, LevelBrowserLayer) {
     }
 
     void onMultiplayer(CCObject*) {
-        MultiplayerMenuPopup::checkUpdatesAndPatreon();
         MultiplayerMenuPopup::create()->show();
     }
 };
@@ -516,6 +510,8 @@ class $modify(MPLevelEditorLayer, LevelEditorLayer) {
         float m_cursorSendTimer = 0.f;
         bool m_sessionActive = false;
         bool m_inUndoRedo = false;
+        bool m_initializing = true;
+        bool m_settingsBroadcastInProgress = false;
         cocos2d::CCPoint m_lastSentLevelPos = {0.f, 0.f};
         bool m_wasPlaytesting = false;
 
@@ -532,11 +528,15 @@ class $modify(MPLevelEditorLayer, LevelEditorLayer) {
     void levelSettingsUpdated() {
         LevelEditorLayer::levelSettingsUpdated();
 
+        if (m_fields->m_initializing) return;
+        if (m_fields->m_settingsBroadcastInProgress) return;
+
         auto& handler = RemoteActionHandler::get();
         if (handler.isProcessingRemote() || !handler.isInitialSyncCompleted()) return;
 
         auto& session = SessionManager::get();
         if (session.isInSession()) {
+            m_fields->m_settingsBroadcastInProgress = true;
             ActionSerializer::LevelSettingsData settings;
             if (this->m_levelSettings) {
                 settings.saveString = this->m_levelSettings->getSaveString();
@@ -549,12 +549,16 @@ class $modify(MPLevelEditorLayer, LevelEditorLayer) {
             RevertManager::get().onSettingsUpdated(session.getLocalPlayerId(), settings);
             auto data = proto::serializeUpdateSettings(settings);
             P2PManager::get().send(std::move(data), ChannelType::Reliable);
+            m_fields->m_settingsBroadcastInProgress = false;
             log::info("EditorHooks: Broadcasted update_settings");
         }
     }
 
     bool init(GJGameLevel* level, bool unk) {
-        if (!LevelEditorLayer::init(level, unk)) return false;
+        if (!LevelEditorLayer::init(level, unk)) {
+            m_fields->m_initializing = false;
+            return false;
+        }
 
         s_startPosObjects.clear();
         s_startPosSaveStrings.clear();
@@ -658,6 +662,7 @@ class $modify(MPLevelEditorLayer, LevelEditorLayer) {
         cursorNode->setID("cursor-node"_spr);
         this->m_objectLayer->addChild(cursorNode, 999);
 
+        m_fields->m_initializing = false;
         return true;
     }
 

@@ -10,9 +10,15 @@
     "name": "Multiplayer Edit",
     "version": "v0.7.0",
     "developer": "d050",
-    "description": "Collaborate with friends in real-time level editing! Host a session and build together.",
+    "description": "Collab with friends in real-time editing.",
     "dependencies": {
-        "geode.node-ids": ">=1.0.0"
+        "geode.node-ids": ">=1.0.0",
+        "alphalaneous.alphas_geode_utils": ">=1.0.0"
+    },
+    "resources": {
+        "sprites": [
+            "resources/*"
+        ]
     },
     "tags": [
         "editor",

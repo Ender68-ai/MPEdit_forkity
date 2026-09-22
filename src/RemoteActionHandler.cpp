@@ -11,7 +11,6 @@
 #include <sstream>
 #include <iomanip>
 #include <set>
-#include <cmath>
 
 using namespace geode::prelude;
 
@@ -1460,6 +1459,7 @@ namespace mpedit {
                                         auto* keyObj = keys->objectAtIndex(i);
                                         intptr_t k = 0;
                                         if (auto* strKey = typeinfo_cast<cocos2d::CCString*>(keyObj)) {
+                                            // @geode-ignore(geode-alternative)
                                             k = std::stoi(strKey->getCString());
                                         } else if (auto* intKey = typeinfo_cast<cocos2d::CCInteger*>(keyObj)) {
                                             k = intKey->getValue();

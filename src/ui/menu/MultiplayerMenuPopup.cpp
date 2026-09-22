@@ -1909,27 +1909,7 @@ namespace mpedit {
     }
 
     void MultiplayerMenuPopup::setupMenus() {
-        auto topMenu = CCMenu::create();
-        topMenu->setContentSize({80.f, 40.f});
-        topMenu->setPosition(this->fromTopRight(10.f, 10.f));
-        topMenu->setAnchorPoint({1.f, 1.f});
-        topMenu->setLayout(RowLayout::create()->setAxisAlignment(AxisAlignment::End)->setGap(5.f));
-        m_uiMenu->addChild(topMenu);
-
-        auto discordSpr = CCSprite::createWithSpriteFrameName("gj_discordIcon_001.png");
-        discordSpr->setScale(1.0f);
-        auto discordBtn = CCMenuItemSpriteExtra::create(discordSpr, this, menu_selector(MultiplayerMenuPopup::onDiscord));
-        topMenu->addChild(discordBtn);
-
-        auto patreonIcon = CCSprite::createWithSpriteFrameName("GJ_starsIcon_001.png");
-        auto patreonSpr = CircleButtonSprite::create(
-            patreonIcon, CircleBaseColor::Pink, CircleBaseSize::Small
-        );
-        patreonSpr->setScale(0.85f);
-        auto patreonBtn = CCMenuItemSpriteExtra::create(patreonSpr, this, menu_selector(MultiplayerMenuPopup::onPatreon));
-        topMenu->addChild(patreonBtn);
-        topMenu->updateLayout();
-
+       
         m_browserUiNode = CCNode::create();
         m_mainLayer->addChild(m_browserUiNode);
 

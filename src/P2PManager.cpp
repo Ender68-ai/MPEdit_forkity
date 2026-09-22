@@ -2,7 +2,6 @@
 #include "SessionManager.hpp"
 #include "utils/ChatFilter.hpp"
 #include "BinaryProtocol.hpp"
-#include "RemoteActionHandler.hpp"
 
 #include <rtc/rtc.hpp>
 #include <rtc/websocket.hpp>

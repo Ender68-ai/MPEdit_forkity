@@ -1,0 +1,58 @@
+{
+	"geode": "5.8.2",
+	"gd": {
+		"win": "2.2081",
+		"android": "2.2081",
+		"mac": "2.2081",
+		"ios": "2.2081"
+	},
+	"id": "imes.git-editor",
+	"name": "Git Editor (Collab, History, Backup)",
+	"version": "v1.0.0",
+	"developer": "imes",
+	"description": "Per-level commit history for GD, think Git.",
+	"links": {
+		"community": "https://discord.gg/E8f6D6XqbW",
+		"source": "https://github.com/ItMe12s/Git-Editor"
+	},
+	"tags": [
+		"editor",
+		"offline",
+		"enhancement",
+		"interface",
+		"utility"
+	],
+	"dependencies": {
+		"geode.node-ids": ">=v1.23.3",
+		"cvolton.level-id-api": ">=2.0.0",
+		"alphalaneous.alphas-ui-pack": ">=v1.1.1"
+	},
+	"settings": {
+		"size-multiplier": {
+			"name": "Top Row Button Size Multiplier",
+			"description": "Scales Git Editor top-row buttons and spacing in editor pause menu.",
+			"type": "float",
+			"default": 0.75,
+			"min": 0.25,
+			"max": 2.0,
+			"control": {
+				"slider": true,
+				"slider-step": 0.05
+			}
+		},
+		"compress-export-files": {
+			"name": "Compress Export Files",
+			"description": "Compress exported .gdge files using zip. Imported files are detected automatically regardless of compression.",
+			"type": "bool",
+			"default": true
+		},
+		"run-automated-test": {
+			"type": "button",
+			"name": "Run Automated Test",
+			"description": "Runs service-level checks (see testing-checklist.md). Writes test-result.txt in mod save data directory.",
+			"buttons": {
+				"run": "Run Automated Test"
+			}
+		}
+	}
+}

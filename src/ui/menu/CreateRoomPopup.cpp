@@ -127,6 +127,7 @@ namespace mpedit {
         
         std::string lim = m_limitInput->getString();
         if (!lim.empty()) {
+            // @geode-ignore(geode-alternative)
             settings.playerLimit = std::stoi(lim);
         } else {
             settings.playerLimit = 0;
