@@ -212,7 +212,7 @@ function splitLevelString(raw) {
     const first = raw.substring(0, firstSemicolon);
     if (first.startsWith('kS')) {
         return {
-            settings: first,
+            settings: first + ';',
             objects: raw.substring(firstSemicolon + 1),
         };
     }
@@ -220,7 +220,9 @@ function splitLevelString(raw) {
 }
 function encodeLevelString(settings, objects) {
     let raw = '';
-    if (settings) raw = settings + ';';
+    if (settings) {
+        raw = settings.endsWith(';') ? settings : settings + ';';
+    }
     raw += objects;
     const compressed = zlib.gzipSync(Buffer.from(raw, 'utf-8'));
     let b64 = compressed.toString('base64');
@@ -242,7 +244,8 @@ function exportToGmd(room, outDir, suffix = '_export') {
     const encoded = encodeLevelString(room.settings.saveString, objectsData.toString('utf8'));
     const gmd = `<plist version="1.0" gjver="2.0"><dict><k>k_0</k><s/><k>k_1</k><s></s><k>k2</k><s>${room.levelName}</s><k>k4</k><s>${encoded}</s></dict></plist>`;
     const safeName = room.levelName.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const outFile = path.join(outDir, `${safeName}${suffix}.gmd`);
+    const filename = room.code ? `${room.code}_${safeName}${suffix}.gmd` : `${safeName}${suffix}.gmd`;
+    const outFile = path.join(outDir, filename);
     fs.writeFileSync(outFile, gmd);
     return outFile;
 }

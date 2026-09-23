@@ -118,13 +118,27 @@ void UploadServerPopup::onHost(CCObject*) {
                     alert->show();
                     this->onClose(nullptr);
                 } else {
-                    FLAlertLayer::create("Error", "Failed to host level: Server returned success=false", "OK")->show();
+                    auto errorMsg = resJson.contains("error") ? resJson["error"].asString().unwrapOr("") : "";
+                    if (!errorMsg.empty()) {
+                        FLAlertLayer::create("Error", fmt::format("Failed to host level: {}", errorMsg), "OK")->show();
+                    } else {
+                        FLAlertLayer::create("Error", "Failed to host level: Server returned success=false", "OK")->show();
+                    }
                 }
             } else {
                 if (res.code() == 401) {
                     FLAlertLayer::create("Error", "Unauthorized. Please set a valid Cloud Auth Token in the mod settings.", "OK")->show();
                 } else {
-                    FLAlertLayer::create("Error", fmt::format("Failed to reach server: {}", res.code()), "OK")->show();
+                    std::string errorMsg = "";
+                    auto resJson = res.json().unwrapOr(matjson::Value());
+                    if (resJson.contains("error") && resJson["error"].isString()) {
+                        errorMsg = resJson["error"].asString().unwrapOr("");
+                    }
+                    if (!errorMsg.empty()) {
+                        FLAlertLayer::create("Error", fmt::format("Failed to host level ({}): {}", res.code(), errorMsg), "OK")->show();
+                    } else {
+                        FLAlertLayer::create("Error", fmt::format("Failed to reach server: {}", res.code()), "OK")->show();
+                    }
                 }
             }
         }

@@ -781,6 +781,112 @@ class $modify(MPLevelEditorLayer, LevelEditorLayer) {
         obj->release();
     }
 
+    void removeAllObjectsOfType(int objectID) {
+        auto& handler = RemoteActionHandler::get();
+        auto& session = SessionManager::get();
+
+        if (session.isLocalPlayerViewOnly() && !handler.isProcessingRemote()) return;
+
+        bool inUndoRedo = m_fields->m_inUndoRedo;
+        bool shouldBroadcastDelete = session.isInSession()
+            && !handler.isProcessingRemote() && !inUndoRedo && !session.isLocalPlayerViewOnly();
+
+        if (shouldBroadcastDelete && this->m_objects) {
+            auto const& locks = handler.getObjectLocks();
+            int localId = session.getLocalPlayerId();
+
+            bool hasLocked = false;
+            for (auto* obj : CCArrayExt<GameObject*>(this->m_objects)) {
+                if (obj && obj->m_objectID == objectID) {
+                    auto uuid = handler.getUUIDForObject(obj);
+                    if (!uuid.empty()) {
+                        auto it = locks.find(uuid);
+                        if (it != locks.end() && it->second.playerId != localId) {
+                            hasLocked = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (hasLocked) {
+                geode::Notification::create("Cannot delete: an object is currently being edited by another player", geode::NotificationIcon::Warning)->show();
+                return;
+            }
+
+            std::vector<std::string> uuids;
+            std::vector<GameObject*> matchingObjects;
+            for (auto* obj : CCArrayExt<GameObject*>(this->m_objects)) {
+                if (obj && obj->m_objectID == objectID) {
+                    matchingObjects.push_back(obj);
+                    auto uuid = handler.getUUIDForObject(obj);
+                    if (!uuid.empty()) {
+                        uuids.push_back(uuid);
+                    }
+                }
+            }
+
+            for (auto* obj : matchingObjects) {
+                if (obj->m_objectID == 31) {
+                    s_startPosObjects.erase(obj);
+                    s_startPosSaveStrings.erase(obj);
+                }
+                if (m_gameState.m_lastActivatedPortal1 == obj) m_gameState.m_lastActivatedPortal1 = nullptr;
+                if (m_gameState.m_lastActivatedPortal2 == obj) m_gameState.m_lastActivatedPortal2 = nullptr;
+                if (this->m_player1) {
+                    if (this->m_player1->m_lastActivatedPortal == obj) this->m_player1->m_lastActivatedPortal = nullptr;
+                    if (this->m_player1->m_touchingRings && this->m_player1->m_touchingRings->containsObject(obj)) {
+                        this->m_player1->m_touchingRings->removeObject(obj);
+                    }
+                }
+                if (this->m_player2) {
+                    if (this->m_player2->m_lastActivatedPortal == obj) this->m_player2->m_lastActivatedPortal = nullptr;
+                    if (this->m_player2->m_touchingRings && this->m_player2->m_touchingRings->containsObject(obj)) {
+                        this->m_player2->m_touchingRings->removeObject(obj);
+                    }
+                }
+                if (this->m_endPortal == obj) this->m_endPortal = nullptr;
+                if (this->m_player1CollisionBlock == obj) this->m_player1CollisionBlock = nullptr;
+                if (this->m_player2CollisionBlock == obj) this->m_player2CollisionBlock = nullptr;
+                if (this->m_startPosObject == obj) this->m_startPosObject = nullptr;
+                if (this->m_copyStateObject == obj) this->m_copyStateObject = nullptr;
+                if (this->m_editorUI) {
+                    if (this->m_editorUI->m_selectedObject == obj) this->m_editorUI->m_selectedObject = nullptr;
+                    if (this->m_editorUI->m_snapObject == obj) this->m_editorUI->m_snapObject = nullptr;
+                    if (this->m_editorUI->m_selectedObjects && this->m_editorUI->m_selectedObjects->containsObject(obj)) {
+                        this->m_editorUI->m_selectedObjects->removeObject(obj);
+                    }
+                }
+                handler.getTrackedSelections().erase(obj);
+            }
+
+            if (!uuids.empty()) {
+                sendChunkedDeleteObjects(uuids);
+                for (auto const& uuid : uuids) {
+                    handler.unregisterObject(uuid);
+                }
+                log::debug("EditorHooks: Deleted {} object(s) of type {}", uuids.size(), objectID);
+            }
+        } else if (this->m_objects) {
+            for (auto* obj : CCArrayExt<GameObject*>(this->m_objects)) {
+                if (obj && obj->m_objectID == objectID) {
+                    if (obj->m_objectID == 31) {
+                        s_startPosObjects.erase(obj);
+                        s_startPosSaveStrings.erase(obj);
+                    }
+                    if (this->m_startPosObject == obj) this->m_startPosObject = nullptr;
+                    auto uuid = handler.getUUIDForObject(obj);
+                    if (!uuid.empty()) {
+                        handler.unregisterObject(uuid);
+                    }
+                    handler.getTrackedSelections().erase(obj);
+                }
+            }
+        }
+
+        LevelEditorLayer::removeAllObjectsOfType(objectID);
+    }
+
     void handleAction(bool undo, cocos2d::CCArray* undoObjects) {
         auto& handler = RemoteActionHandler::get();
         auto& session = SessionManager::get();
@@ -1437,6 +1543,16 @@ class $modify(MPEditorUI, EditorUI) {
         }
 
         EditorUI::onDeleteSelected(sender);
+    }
+
+    void onDeleteStartPos(cocos2d::CCObject* sender) {
+        if (SessionManager::get().isLocalPlayerViewOnly()) return;
+        EditorUI::onDeleteStartPos(sender);
+    }
+
+    void onDeleteSelectedType(cocos2d::CCObject* sender) {
+        if (SessionManager::get().isLocalPlayerViewOnly()) return;
+        EditorUI::onDeleteSelectedType(sender);
     }
 
     bool shouldDeleteObject(GameObject* obj) {

@@ -5,6 +5,9 @@
 #include "SessionManager.hpp"
 #include "MessageBatcher.hpp"
 #include "ui/menu/MultiplayerMenuPopup.hpp"
+#include <Geode/binding/GJAccountManager.hpp>
+#include <Geode/binding/GameLevelManager.hpp>
+#include <Geode/cocos/support/zip_support/ZipUtils.h>
 #include <Geode/Geode.hpp>
 #include <Geode/utils/file.hpp>
 #include <random>
@@ -495,6 +498,7 @@ namespace mpedit {
         for (size_t i = 0; i < objects.size(); i++) {
             auto const& objData = objects[i];
             if (processedUUIDs.count(objData.uuid)) continue;
+            if (getObjectByUUID(objData.uuid) != nullptr) continue;
             processedUUIDs.insert(objData.uuid);
             
             if (!objData.saveString.empty()) {
@@ -1047,42 +1051,65 @@ namespace mpedit {
 
         auto* editor = getEditorLayer();
         if (!editor) {
-            log::info("RemoteActionHandler: Editor not ready yet, opening editor with settings-only level string");
+            log::info("RemoteActionHandler: Editor not ready yet, opening editor with full level string");
 
-            std::string levelString = settings.saveString;
+            std::string rawSettings = settings.saveString;
+            if (rawSettings.empty()) {
+                rawSettings = "kS38,1_40_2_125_3_255_4_-1_6_1_7_1_8_1,kA13,0,kA15,0,kA16,0,kA14,0,kA6,0,kA7,0,kA17,0,kA18,0,kS39,0,kA2,0,kA3,0,kA8,0,kA4,0,kA9,0,kA10,0,kA11,0;";
+            } else if (!rawSettings.ends_with(';')) {
+                rawSettings += ';';
+            }
+
+            std::string fullLevelString = rawSettings + objectsString;
             m_expectedUuids = uuids;
 
-            m_pendingSync = PendingSync {
-                playerId,
-                objectsString,
-                uuids,
-                settings,
-                locks
-            };
+            m_pendingSync.reset();
 
-            auto* level = GJGameLevel::create();
+            m_objectLocks.clear();
+            for (auto const& lock : locks) {
+                m_objectLocks[lock.uuid] = LockInfo { lock.playerId, lock.timeLeft };
+            }
+
+            GJGameLevel* level = nullptr;
+            auto* glm = GameLevelManager::sharedState();
+            if (glm) {
+                level = glm->createNewLevel();
+            }
+            if (!level) {
+                level = GJGameLevel::create();
+            }
+
             level->m_levelName = settings.levelName.empty() ? "Multiplayer Session" : settings.levelName;
             level->m_levelType = GJLevelType::Editor;
-            level->m_levelString = levelString;
+            level->m_levelString = fullLevelString;
             level->m_audioTrack = settings.audioTrack;
             level->m_songID = settings.songID;
             level->m_levelLength = settings.levelLength;
+            level->m_isEditable = true;
+            level->m_gameVersion = 22;
+            level->m_levelVersion = 1;
+            level->m_levelRev = 1;
+            auto* am = GJAccountManager::sharedState();
+            if (am) {
+                level->m_accountID = am->m_accountID;
+            }
 
             auto* scene = LevelEditorLayer::scene(level, false);
             if (!scene) {
                 log::error("RemoteActionHandler: LevelEditorLayer::scene returned null — cannot open editor for sync!");
-                m_pendingSync.reset();
                 return;
             }
 
             if (MultiplayerMenuPopup::s_instance) {
-                MultiplayerMenuPopup::s_instance->forceClose();
+                MultiplayerMenuPopup::s_instance->removeFromParentAndCleanup(true);
+                MultiplayerMenuPopup::s_instance = nullptr;
             }
 
-            cocos2d::CCDirector::sharedDirector()->pushScene(scene);
+            auto* transition = cocos2d::CCTransitionFade::create(0.5f, scene);
+            cocos2d::CCDirector::sharedDirector()->replaceScene(transition);
 
-            log::info("RemoteActionHandler: Pushed editor scene; pending sync will apply in init() (hasPending={})",
-                m_pendingSync.has_value());
+            log::info("RemoteActionHandler: Replaced editor scene with full level string (objects={}, uuids={})",
+                objectsString.size(), uuids.size());
             return;
         }
 

@@ -23,7 +23,7 @@ class WSServer {
         this.wss.handleUpgrade(request, socket, head, (ws) => {
           ws.send(
             proto.serializeError(
-              "Room code not specified. Connect using ws://<host>/<ROOM_CODE> to join a specific room.",
+              "Please specify the room code in the URL (e.g., https://host:port/CODE).",
             ),
           );
           ws.close(1008, "Room code not specified");
@@ -126,10 +126,9 @@ class WSServer {
       `;
 
       try {
-        const files = fsModule.readdirSync(levelsDir);
-        // Look for files starting with the sanitized level name
-        const prefix = room.levelName.replace(/[^a-zA-Z0-9]/g, '_');
-        const matchFiles = files.filter(f => f.startsWith(prefix) && f.endsWith('.gmd'));
+        const prefix = `${room.code}_`;
+        const legacyPrefix = room.levelName.replace(/[^a-zA-Z0-9]/g, '_');
+        const matchFiles = files.filter(f => (f.startsWith(prefix) || f.startsWith(legacyPrefix)) && f.endsWith('.gmd'));
         
         if (matchFiles.length === 0) {
           html += `<p>No backup files found yet. Save the level in-game to create a backup!</p>`;
@@ -248,10 +247,13 @@ class WSServer {
             this.roomManager.deleteRoom(data.code);
           } else if (data.action === "setPassword") {
             room.password = data.password || "";
+            this.roomManager.saveManifest();
           } else if (data.action === "setMaxPlayers") {
             room.maxPlayers = data.maxPlayers || 100;
+            this.roomManager.saveManifest();
           } else if (data.action === "rename") {
             room.levelName = data.name || room.levelName;
+            this.roomManager.saveManifest();
           }
 
           res.writeHead(200, { "Content-Type": "application/json" });
@@ -277,16 +279,23 @@ class WSServer {
       req.on("end", () => {
         try {
           const data = JSON.parse(body);
-          if (!data.levelString || !data.levelName) {
+          if (!data.levelName || typeof data.levelName !== "string") {
             res.writeHead(400);
             res.end(
-              JSON.stringify({ error: "Missing levelName or levelString" }),
+              JSON.stringify({ error: "Missing levelName" }),
+            );
+            return;
+          }
+          if (data.levelString !== undefined && typeof data.levelString !== "string") {
+            res.writeHead(400);
+            res.end(
+              JSON.stringify({ error: "Invalid levelString" }),
             );
             return;
           }
           const level = {
             name: data.levelName,
-            levelString: data.levelString,
+            levelString: data.levelString || "",
             songID: data.songID || 0,
             audioTrack: data.audioTrack || 0,
           };
@@ -296,7 +305,8 @@ class WSServer {
             data.password || "",
             data.defaultViewOnly || false,
           );
-          room.ownerToken = token; // Tag the room with the owner's token
+          room.ownerToken = token;
+          this.roomManager.saveManifest();
 
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ success: true, code: room.code }));

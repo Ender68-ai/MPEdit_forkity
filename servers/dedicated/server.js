@@ -255,8 +255,9 @@ async function loadLevelsFromSource(mode) {
   }
   return levels;
 }
-async function promptAndLoadLevels() {
-  if (serverConfig.useConfig === 1) {
+async function promptAndLoadLevels(interactiveOnly = false) {
+  if (serverConfig.useConfig === 1 && !interactiveOnly) {
+    if (serverConfig.mode === "restore") return { _restore: true };
     if (serverConfig.mode === "none") return { _skip: true };
     if (serverConfig.mode === "custom") {
       const manualPath = serverConfig.customPath;
@@ -281,37 +282,63 @@ async function promptAndLoadLevels() {
     return await loadLevelsFromSource(serverConfig.mode);
   }
 
+  const manifestPath = path.join(process.cwd(), "rooms.json");
+  let savedCount = 0;
+  if (fs.existsSync(manifestPath)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+      if (data && data.rooms) savedCount = Object.keys(data.rooms).length;
+    } catch (e) {}
+  }
+
+  const choices = [];
+  if (savedCount > 0 && !interactiveOnly) {
+    choices.push({
+      title: `Restore previous session (rooms.json - ${savedCount} room${savedCount === 1 ? "" : "s"})`,
+      value: "restore",
+    });
+  }
+  choices.push(
+    { title: "My Geometry Dash Saves (CCLocalLevels.dat)", value: "gd" },
+    { title: "Local .gmd files (from the levels folder)", value: "gmd" },
+    { title: "Enter a custom file path...", value: "custom" },
+  );
+  if (!interactiveOnly) {
+    choices.push(
+      { title: "Don't host any levels (remote uploads only)", value: "none" },
+    );
+  }
+
   const modeResponse = await prompts({
     type: "select",
     name: "mode",
     message: "Where do you want to load levels from?",
-    choices: [
-      { title: "My Geometry Dash Saves (CCLocalLevels.dat)", value: "gd" },
-      { title: "Local .gmd files (from the levels folder)", value: "gmd" },
-      { title: "Enter a custom file path...", value: "custom" },
-      { title: "Don't host any levels (remote uploads only)", value: "none" },
-    ],
+    choices: choices,
   });
-  if (!modeResponse.mode) return [];
+  if (!modeResponse || !modeResponse.mode) return [];
 
-  serverConfig.mode = modeResponse.mode;
+  if (!interactiveOnly) {
+    serverConfig.mode = modeResponse.mode;
+  }
+
+  if (modeResponse.mode === "restore") {
+    return { _restore: true };
+  }
 
   if (modeResponse.mode === "none") {
       return { _skip: true };
   }
 
   if (modeResponse.mode === "custom") {
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
+    const pathResponse = await prompts({
+      type: "text",
+      name: "customPath",
+      message: "Enter full path to a .gmd file:",
     });
-    const manualPath = await new Promise((resolve) =>
-      rl.question("\x1b[33mEnter full path to a .gmd file:\x1b[0m ", resolve),
-    );
-    rl.close();
-    
-    serverConfig.customPath = manualPath;
-    
+    const manualPath = pathResponse && pathResponse.customPath ? pathResponse.customPath.trim() : "";
+    if (!interactiveOnly) {
+      serverConfig.customPath = manualPath;
+    }
     if (!manualPath || !fs.existsSync(manualPath)) {
       console.error(
         "\n\x1b[31m[ERROR]\x1b[0m Invalid path or file does not exist.",
@@ -334,9 +361,9 @@ async function promptAndLoadLevels() {
   }
   return await loadLevelsFromSource(modeResponse.mode);
 }
-async function selectLevels(levels) {
-  if (levels.length === 0) return [];
-  if (serverConfig.useConfig === 1) {
+async function selectLevels(levels, interactiveOnly = false) {
+  if (!Array.isArray(levels) || levels.length === 0) return [];
+  if (serverConfig.useConfig === 1 && !interactiveOnly) {
     if (serverConfig.selectedLevels.includes("all")) return levels;
     return levels.filter(l => serverConfig.selectedLevels.includes(l.filename) || serverConfig.selectedLevels.includes(l.name));
   }
@@ -353,8 +380,10 @@ async function selectLevels(levels) {
     }),
     hint: "- Space to select. Return to submit.",
   });
-  const selected = response.selectedLevels || [];
-  serverConfig.selectedLevels = selected.map(l => l.filename || l.name);
+  const selected = response && response.selectedLevels ? response.selectedLevels : [];
+  if (!interactiveOnly) {
+    serverConfig.selectedLevels = selected.map(l => l.filename || l.name);
+  }
   return selected;
 }
 
@@ -432,6 +461,38 @@ function printHelp() {
     console.log("");
   }
 }
+
+function startAdminCLI() {
+  if (rlAdmin) {
+    try { rlAdmin.close(); } catch (e) {}
+    rlAdmin = null;
+  }
+  if (process.stdin.isTTY && typeof process.stdin.setRawMode === "function") {
+    try { process.stdin.setRawMode(false); } catch (e) {}
+  }
+  try { process.stdin.resume(); } catch (e) {}
+  rlAdmin = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  rlAdmin.on("line", async (line) => {
+    const parsed = parseCommand(line);
+    if (!parsed) return;
+    try {
+      await handleCommand(parsed);
+    } catch (e) {
+      console.error(`  \x1b[31m[ERROR]\x1b[0m Command failed:`, e.message);
+    }
+  });
+}
+
+function stopAdminCLI() {
+  if (rlAdmin) {
+    try { rlAdmin.close(); } catch (e) {}
+    rlAdmin = null;
+  }
+}
+
 async function handleCommand(parsed) {
   const { cmd, positional: args, flags } = parsed;
   switch (cmd) {
@@ -455,15 +516,15 @@ async function handleCommand(parsed) {
       break;
     }
     case "/host": {
-      if (rlAdmin) rlAdmin.pause();
+      stopAdminCLI();
       try {
-        const levels = await promptAndLoadLevels();
-        if (levels.length === 0) {
+        const levels = await promptAndLoadLevels(true);
+        if (!Array.isArray(levels) || levels.length === 0) {
           console.log("  \x1b[33mNo levels loaded.\x1b[0m");
           break;
         }
-        const selected = await selectLevels(levels);
-        if (selected.length === 0) {
+        const selected = await selectLevels(levels, true);
+        if (!Array.isArray(selected) || selected.length === 0) {
           console.log("  \x1b[33mNo levels selected.\x1b[0m");
           break;
         }
@@ -489,6 +550,10 @@ async function handleCommand(parsed) {
             inactive: "no",
           },
         ]);
+        if (!settingsResponse || settingsResponse.maxPlayers === undefined) {
+          console.log("  \x1b[33mCancelled.\x1b[0m");
+          break;
+        }
         const maxPlayers =
           typeof settingsResponse.maxPlayers === "number" &&
           isFinite(settingsResponse.maxPlayers) &&
@@ -512,7 +577,7 @@ async function handleCommand(parsed) {
         console.log("");
         printRoomsTable();
       } finally {
-        if (rlAdmin) rlAdmin.resume();
+        startAdminCLI();
       }
       break;
     }
@@ -541,15 +606,19 @@ async function handleCommand(parsed) {
         0,
       );
       if (totalPlayers > 0 && !flags.force) {
-        if (rlAdmin) rlAdmin.pause();
-        const confirm = await prompts({
-          type: "confirm",
-          name: "proceed",
-          message: `${targets.length} room(s) with ${totalPlayers} active player(s). Close anyway?`,
-          initial: false,
-        });
-        if (rlAdmin) rlAdmin.resume();
-        if (!confirm.proceed) {
+        stopAdminCLI();
+        let confirm = { proceed: false };
+        try {
+          confirm = await prompts({
+            type: "confirm",
+            name: "proceed",
+            message: `${targets.length} room(s) with ${totalPlayers} active player(s). Close anyway?`,
+            initial: false,
+          });
+        } finally {
+          startAdminCLI();
+        }
+        if (!confirm || !confirm.proceed) {
           console.log("  Cancelled.");
           return;
         }
@@ -809,6 +878,7 @@ async function handleCommand(parsed) {
       const pass =
         args[0].toLowerCase() === "none" || args[0] === '""' ? "" : args[0];
       room.password = pass;
+      roomManager.saveManifest();
       if (pass) {
         console.log(
           `  \x1b[36m\x1b[1m[ADMIN]\x1b[0m Password set for "${room.levelName}".`,
@@ -829,6 +899,7 @@ async function handleCommand(parsed) {
       if (isNaN(count) || count < 0)
         return console.log("  \x1b[31mInvalid number.\x1b[0m");
       room.maxPlayers = count;
+      roomManager.saveManifest();
       console.log(
         `  \x1b[36m\x1b[1m[ADMIN]\x1b[0m Max players set to ${count === 0 ? "unlimited" : count} for "${room.levelName}".`,
       );
@@ -842,6 +913,7 @@ async function handleCommand(parsed) {
       const newName = args[0];
       room.levelName = newName;
       if (room.settings) room.settings.levelName = newName;
+      roomManager.saveManifest();
       console.log(
         `  \x1b[36m\x1b[1m[ADMIN]\x1b[0m Room renamed to "${newName}".`,
       );
@@ -905,21 +977,28 @@ async function handleCommand(parsed) {
     }
     case "/makeconfig": {
       if (fs.existsSync(configPath)) {
-        if (rlAdmin) rlAdmin.pause();
-        const confirm = await prompts({
-          type: "confirm",
-          name: "proceed",
-          message: "This will overwrite the current config.json, proceed?",
-          initial: false,
-        });
-        if (rlAdmin) rlAdmin.resume();
-        if (!confirm.proceed) {
+        stopAdminCLI();
+        let confirm = { proceed: false };
+        try {
+          confirm = await prompts({
+            type: "confirm",
+            name: "proceed",
+            message: "This will overwrite the current config.json, proceed?",
+            initial: false,
+          });
+        } finally {
+          startAdminCLI();
+        }
+        if (!confirm || !confirm.proceed) {
           console.log("  \x1b[33mCancelled.\x1b[0m");
           break;
         }
       }
       
       serverConfig.useConfig = 1;
+      if (roomManager && roomManager.rooms.size > 0 && serverConfig.mode !== "custom") {
+        serverConfig.mode = "restore";
+      }
       try {
         fs.writeFileSync(configPath, JSON.stringify(serverConfig, null, 2), "utf8");
         console.log("  \x1b[32m\x1b[1m[CONFIG]\x1b[0m Saved current startup settings to config.json");
@@ -938,15 +1017,19 @@ async function handleCommand(parsed) {
         totalPlayers += room.players.size;
       }
       if (totalPlayers > 0 && !flags.force) {
-        if (rlAdmin) rlAdmin.pause();
-        const confirm = await prompts({
-          type: "confirm",
-          name: "proceed",
-          message: `${totalPlayers} player(s) still connected. Shut down?`,
-          initial: false,
-        });
-        if (rlAdmin) rlAdmin.resume();
-        if (!confirm.proceed) {
+        stopAdminCLI();
+        let confirm = { proceed: false };
+        try {
+          confirm = await prompts({
+            type: "confirm",
+            name: "proceed",
+            message: `${totalPlayers} player(s) still connected. Shut down?`,
+            initial: false,
+          });
+        } finally {
+          startAdminCLI();
+        }
+        if (!confirm || !confirm.proceed) {
           console.log("  Cancelled.");
           return;
         }
@@ -976,6 +1059,7 @@ async function handleCommand(parsed) {
           }
         }
       }
+      roomManager.saveManifest();
       wsServer.stop();
       roomManager.stop();
       process.exit(0);
@@ -992,7 +1076,7 @@ async function main() {
     "\x1b[36m\x1b[1m MultiplayerEdit Dedicated Server \x1b[0m\n",
   );
   const levels = await promptAndLoadLevels();
-  if (levels.length === 0 && !levels._skip) {
+  if (levels.length === 0 && !levels._skip && !levels._restore) {
     console.error(
       "\n\x1b[31m[ERROR]\x1b[0m No levels found to host. Exiting...",
     );
@@ -1001,7 +1085,35 @@ async function main() {
   let selectedLevels = [];
   let response = { port: 7575, maxPlayers: 0, password: '', autosaveInterval: 0 };
   
-  if (!levels._skip) {
+  if (levels._restore) {
+      let savedAutosave = 5;
+      const manifestPath = path.join(process.cwd(), "rooms.json");
+      if (fs.existsSync(manifestPath)) {
+        try {
+          const data = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+          if (data && data.autosaveInterval !== undefined) savedAutosave = data.autosaveInterval;
+        } catch (e) {}
+      }
+      if (serverConfig.useConfig === 1) {
+        response = serverConfig;
+        if (serverConfig.autosaveInterval === undefined) {
+          response.autosaveInterval = savedAutosave;
+        }
+      } else {
+        response = await prompts([
+          {
+            type: "number",
+            name: "port",
+            message: "Port",
+            initial: serverConfig.port || 7575,
+          }
+        ]);
+        response.autosaveInterval = savedAutosave;
+        response.maxPlayers = 0;
+        response.password = '';
+        response.defaultViewOnly = false;
+      }
+  } else if (!levels._skip) {
       selectedLevels = await selectLevels(levels);
       if (selectedLevels.length === 0) {
         console.error("No levels selected. Exiting...");
@@ -1096,20 +1208,33 @@ async function main() {
       : 5;
   const defaultViewOnly = !!response.defaultViewOnly;
   roomManager = new RoomManager();
+  roomManager.autosaveInterval = globalAutosaveInterval;
   wsServer = new WSServer(roomManager);
   console.log("\nStarting server...");
   roomManager.start(port, false);
   console.log("");
-  for (const level of selectedLevels) {
-    const room = roomManager.createRoomForLevel(
-      level,
-      maxPlayers,
-      roomPassword,
-      defaultViewOnly,
-    );
-    console.log(
-      `  \x1b[32m\x1b[1m✓ Room created: "${room.levelName}" [${room.code}]\x1b[0m`,
-    );
+  if (levels._restore) {
+    const restored = roomManager.restoreRooms();
+    for (const room of restored) {
+      console.log(
+        `  \x1b[32m\x1b[1m✓ Room restored: "${room.levelName}" [${room.code}]\x1b[0m`,
+      );
+    }
+    if (restored.length === 0) {
+      console.log("  \x1b[33mNo rooms could be restored from rooms.json.\x1b[0m");
+    }
+  } else {
+    for (const level of selectedLevels) {
+      const room = roomManager.createRoomForLevel(
+        level,
+        maxPlayers,
+        roomPassword,
+        defaultViewOnly,
+      );
+      console.log(
+        `  \x1b[32m\x1b[1m✓ Room created: "${room.levelName}" [${room.code}]\x1b[0m`,
+      );
+    }
   }
   if (globalAutosaveInterval > 0) {
     autosaveTimer = setInterval(() => {
@@ -1136,18 +1261,38 @@ async function main() {
     );
   }
   console.log("\n  Type \x1b[1m/help\x1b[0m for a list of admin commands.\n");
-  rlAdmin = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-  rlAdmin.on("line", async (line) => {
-    const parsed = parseCommand(line);
-    if (!parsed) return;
-    try {
-      await handleCommand(parsed);
-    } catch (e) {
-      console.error(`  \x1b[31m[ERROR]\x1b[0m Command failed:`, e.message);
-    }
-  });
+  startAdminCLI();
 }
 main().catch(console.error);
+
+process.on("SIGINT", () => {
+  if (autosaveTimer) clearInterval(autosaveTimer);
+  if (roomManager) {
+    for (const [, room] of roomManager.rooms) {
+      try {
+        const levelsDir = path.join(process.cwd(), "levels");
+        saveReader.exportToGmd(room, levelsDir, "_save");
+      } catch (e) {}
+    }
+    roomManager.saveManifest();
+    roomManager.stop();
+  }
+  if (wsServer) wsServer.stop();
+  process.exit(0);
+});
+
+process.on("SIGTERM", () => {
+  if (autosaveTimer) clearInterval(autosaveTimer);
+  if (roomManager) {
+    for (const [, room] of roomManager.rooms) {
+      try {
+        const levelsDir = path.join(process.cwd(), "levels");
+        saveReader.exportToGmd(room, levelsDir, "_save");
+      } catch (e) {}
+    }
+    roomManager.saveManifest();
+    roomManager.stop();
+  }
+  if (wsServer) wsServer.stop();
+  process.exit(0);
+});

@@ -252,7 +252,7 @@ void ManageRoomPopup::onDownloadBackups(CCObject*) {
     geode::utils::web::openLinkInBrowser(dlUrl);
 }
 
-class PasswordPopup : public BasePopup {
+class ManagePasswordPopup : public BasePopup {
 protected:
     ManageRoomPopup* m_parentPopup = nullptr;
     geode::TextInput* m_input = nullptr;
@@ -268,7 +268,7 @@ protected:
         this->m_mainLayer->addChild(m_input);
 
         auto btnSprite = ButtonSprite::create("Apply", "goldFont.fnt", "GJ_button_01.png", 0.8f);
-        auto btn = CCMenuItemSpriteExtra::create(btnSprite, this, menu_selector(PasswordPopup::onApply));
+        auto btn = CCMenuItemSpriteExtra::create(btnSprite, this, menu_selector(ManagePasswordPopup::onApply));
         btn->setPosition(this->m_mainLayer->getContentSize().width / 2, 40.f);
         
         auto menu = CCMenu::create();
@@ -306,8 +306,8 @@ protected:
     }
 
 public:
-    static PasswordPopup* create(ManageRoomPopup* parent) {
-        auto ret = new PasswordPopup();
+    static ManagePasswordPopup* create(ManageRoomPopup* parent) {
+        auto ret = new ManagePasswordPopup();
         if (ret->init(parent)) {
             ret->autorelease();
             return ret;
@@ -318,7 +318,7 @@ public:
 };
 
 void ManageRoomPopup::onChangePassword(CCObject*) {
-    PasswordPopup::create(this)->show();
+    ManagePasswordPopup::create(this)->show();
 }
 
 class MaxPlayersPopup : public BasePopup {

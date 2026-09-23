@@ -12,6 +12,12 @@ class BasePopup : public geode::Popup {
 public:
     ~BasePopup() override {
         this->m_forcePrioRegistered = false;
+        cocos2d::CCDirector::sharedDirector()->getTouchDispatcher()->removeDelegate(this);
+    }
+
+    void onExit() override {
+        cocos2d::CCDirector::sharedDirector()->getTouchDispatcher()->removeDelegate(this);
+        geode::Popup::onExit();
     }
 
     void onClose(cocos2d::CCObject* sender = nullptr) override {
@@ -26,6 +32,7 @@ public:
     }
 
     bool ccTouchBegan(cocos2d::CCTouch*, cocos2d::CCEvent*) override {
+        if (!this->isRunning() || !this->isVisible()) return false;
         return true;
     }
 

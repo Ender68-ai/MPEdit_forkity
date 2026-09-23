@@ -34,16 +34,40 @@ namespace mpedit {
 
     rtc::Configuration P2PManager::makeRtcConfig() {
         rtc::Configuration config;
+
+        auto mode = Mod::get()->getSettingValue<std::string>("ice-transport-mode");
+
         config.iceServers.push_back({"stun:stun.l.google.com:19302"});
         config.iceServers.push_back({"stun:stun.cloudflare.com:3478"});
         config.iceServers.push_back({"stun:stun.nextcloud.com:443"});
         config.iceServers.push_back({"stun:stun.1und1.de:3478"});
         config.iceServers.push_back({"stun:stun.sipgate.net:3478"});
 
-        config.iceServers.emplace_back("openrelay.metered.ca", 80, "openrelayproject", "openrelayproject", rtc::IceServer::RelayType::TurnUdp);
-        config.iceServers.emplace_back("openrelay.metered.ca", 443, "openrelayproject", "openrelayproject", rtc::IceServer::RelayType::TurnUdp);
-        config.iceServers.emplace_back("openrelay.metered.ca", 443, "openrelayproject", "openrelayproject", rtc::IceServer::RelayType::TurnTcp);
-        config.iceServers.emplace_back("openrelay.metered.ca", 443, "openrelayproject", "openrelayproject", rtc::IceServer::RelayType::TurnTls);
+        if (mode != "STUN Only") {
+            if (!m_turnServers.empty()) {
+                for (auto const& ts : m_turnServers) {
+                    if (ts.urls.find("transport=tcp") != std::string::npos || ts.urls.rfind("turns:", 0) == 0) {
+                        continue;
+                    }
+                    try {
+                        rtc::IceServer server(ts.urls);
+                        server.username = ts.username;
+                        server.password = ts.credential;
+                        server.type = rtc::IceServer::Type::Turn;
+                        server.relayType = rtc::IceServer::RelayType::TurnUdp;
+                        config.iceServers.push_back(std::move(server));
+                    } catch (...) {}
+                }
+            } else {
+                config.iceServers.emplace_back("openrelay.metered.ca", 3478, "openrelayproject", "openrelayproject", rtc::IceServer::RelayType::TurnUdp);
+                config.iceServers.emplace_back("openrelay.metered.ca", 443, "openrelayproject", "openrelayproject", rtc::IceServer::RelayType::TurnUdp);
+                config.iceServers.emplace_back("openrelay.metered.ca", 80, "openrelayproject", "openrelayproject", rtc::IceServer::RelayType::TurnUdp);
+            }
+        }
+
+        if (mode == "TURN Only") {
+            config.iceTransportPolicy = rtc::TransportPolicy::Relay;
+        }
 
         config.maxMessageSize = 250 * 1024 * 1024;
         return config;
@@ -465,6 +489,19 @@ namespace mpedit {
                     auto roomCode = json.get<std::string>("roomCode").unwrapOr("");
                     m_signalingRoomId = json.get<std::string>("roomId").unwrapOr("");
 
+                    m_turnServers.clear();
+                    if (json.contains("turnServers") && json["turnServers"].isArray()) {
+                        for (auto const& item : json["turnServers"].asArray().unwrap()) {
+                            TurnServerInfo info;
+                            info.urls = item.get<std::string>("urls").unwrapOr("");
+                            info.username = item.get<std::string>("username").unwrapOr("");
+                            info.credential = item.get<std::string>("credential").unwrapOr("");
+                            if (!info.urls.empty()) {
+                                m_turnServers.push_back(std::move(info));
+                            }
+                        }
+                    }
+
                      if (roomCode.empty()) {
                         std::vector<ErrorCb> callbacks;
                         std::string err;
@@ -739,6 +776,12 @@ namespace mpedit {
                             it->second.remoteTurnCount++;
                         }
                         if (it->second.pc->remoteDescription().has_value()) {
+                            auto candType = rtcCand.type();
+                            std::string typeStr = "host";
+                            if (candType == rtc::Candidate::Type::ServerReflexive) typeStr = "srflx";
+                            else if (candType == rtc::Candidate::Type::PeerReflexive) typeStr = "prflx";
+                            else if (candType == rtc::Candidate::Type::Relayed) typeStr = "relay";
+                            log::info("P2PManager: Adding remote {} candidate from {}", typeStr, fromId);
                             it->second.pc->addRemoteCandidate(rtcCand);
                         } else {
                             log::info("P2PManager: Remote description not set, buffering candidate from {}", fromId);
@@ -871,6 +914,19 @@ namespace mpedit {
                     
                     log::info("P2PManager: Joined room {} as player {}", roomCode, m_localPlayerId);
 
+                    m_turnServers.clear();
+                    if (json.contains("turnServers") && json["turnServers"].isArray()) {
+                        for (auto const& item : json["turnServers"].asArray().unwrap()) {
+                            TurnServerInfo info;
+                            info.urls = item.get<std::string>("urls").unwrapOr("");
+                            info.username = item.get<std::string>("username").unwrapOr("");
+                            info.credential = item.get<std::string>("credential").unwrapOr("");
+                            if (!info.urls.empty()) {
+                                m_turnServers.push_back(std::move(info));
+                            }
+                        }
+                    }
+
                     auto pc = std::make_shared<rtc::PeerConnection>(makeRtcConfig());
 
                     PeerInfo hostPeer;
@@ -916,12 +972,18 @@ namespace mpedit {
                     auto answerSent = std::make_shared<bool>(false);
 
                     pc->onLocalCandidate([this, myId, roomCode](rtc::Candidate candidate) {
+                        auto candType = candidate.type();
+                        std::string typeStr = "host";
+                        if (candType == rtc::Candidate::Type::ServerReflexive) typeStr = "srflx";
+                        else if (candType == rtc::Candidate::Type::PeerReflexive) typeStr = "prflx";
+                        else if (candType == rtc::Candidate::Type::Relayed) typeStr = "relay";
+                        log::info("P2PManager: Client generated {} candidate", typeStr);
+
                         auto body = matjson::Value();
                         body["type"] = "candidate";
                         body["candidate"] = std::string(candidate.candidate());
                         body["mid"] = std::string(candidate.mid());
                         body["playerId"] = myId;
-                        auto candType = candidate.type();
                         queueInMainThread([this, roomCode, body, candType]() {
                             {
                                 std::lock_guard lock(m_peersMutex);
@@ -1223,6 +1285,13 @@ namespace mpedit {
         auto offerSent = std::make_shared<bool>(false);
 
         pc->onLocalCandidate([this, clientPlayerId, roomCode](rtc::Candidate candidate) {
+            auto candType = candidate.type();
+            std::string typeStr = "host";
+            if (candType == rtc::Candidate::Type::ServerReflexive) typeStr = "srflx";
+            else if (candType == rtc::Candidate::Type::PeerReflexive) typeStr = "prflx";
+            else if (candType == rtc::Candidate::Type::Relayed) typeStr = "relay";
+            log::info("P2PManager: Host generated {} candidate for player {}", typeStr, clientPlayerId);
+
             auto body = matjson::Value();
             body["type"] = "candidate";
             body["candidate"] = std::string(candidate.candidate());
@@ -1302,7 +1371,7 @@ namespace mpedit {
         }
 
         std::thread([this, clientPlayerId]() {
-            std::this_thread::sleep_for(std::chrono::seconds(15));
+            std::this_thread::sleep_for(std::chrono::seconds(35));
             geode::queueInMainThread([this, clientPlayerId]() {
                 if (m_role != Role::Host) return;
                 bool needsDisconnect = false;
@@ -1470,6 +1539,7 @@ namespace mpedit {
         m_state.store(State::Disconnected);
         m_nextPlayerId = 1;
         m_signalingRoomId.clear();
+        m_turnServers.clear();
 
         log::info("P2PManager: Session ended");
     }

@@ -17,12 +17,15 @@ function generateUUID() {
     return `s${now.toString(16)}${(uuidCounter++).toString(16)}${rand.toString(16)}`;
 }
 class Room {
-    constructor(levelName, levelData, settings) {
-        this.code = generateRoomCode();
+    constructor(levelName, levelData, settings, code = null) {
+        this.code = code || generateRoomCode();
         this.levelName = levelName;
         this.compressedLevelData = levelData.compressedBytes; 
         this.uuids = levelData.uuids || [];
         this.settings = settings || { saveString: '', audioTrack: 0, songID: 0, levelLength: 0 };
+        this.ownerToken = null;
+        this.createdAt = Date.now();
+        this.lastSavedAt = Date.now();
         this.locks = new Map(); 
         this.colorChannels = new Map(); 
         this.players = new Map(); 
@@ -368,7 +371,10 @@ class Room {
             const msg = proto.deserializeSyncLevelStart(r);
             if (r.error) return true;
             this.locks.clear();
-        this.snapshotState = {
+            if (!this.snapshotPending) {
+                this.snapshotRequestedAt = this.history.length;
+            }
+            this.snapshotState = {
                 fromPlayerId: playerId,
                 active: true,
                 totalChunks: msg.totalChunks,
@@ -425,12 +431,12 @@ class Room {
             this.dirty = false;
             this.snapshotPending = false;
             this.snapshotState = null;
-            if (this.snapshotRequestedAt !== undefined) {
+            if (this.snapshotRequestedAt !== undefined && this.snapshotRequestedAt > 0) {
                 this.history = this.history.slice(this.snapshotRequestedAt);
-                this.snapshotRequestedAt = 0;
             } else {
                 this.history = [];
             }
+            this.snapshotRequestedAt = 0;
             console.log(`  [${this.code}] Snapshot received (${allUuids.length} objects, ${this.compressedLevelData.length} bytes)`);
             if (this.onSnapshotSaved) this.onSnapshotSaved(this);
             return true;
