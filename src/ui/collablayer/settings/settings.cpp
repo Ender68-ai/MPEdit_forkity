@@ -1,5 +1,9 @@
 #include "settings.hpp"
+#include "../../menu/AppearancePopup.hpp"
+#include "../../menu/DedicatedServersPopup.hpp"
 #include "../../utils/Panel.hpp"
+
+using namespace mpedit;
 
 // SettingsLayer
 
@@ -69,9 +73,32 @@ bool SettingsLayer::init() {
     Home->setPosition({400.f, 180.f});
     addChild(Home);
 
-    
+    auto menu = CCMenu::create();
+    menu->setPosition({winSize.width * 0.5f, winSize.height * 0.5f});
+    addChild(menu);
+
+    auto appearanceSprite = ButtonSprite::create("Appearance", "goldFont.fnt", "GJ_button_01.png", 0.7f);
+    auto appearanceBtn = CCMenuItemSpriteExtra::create(appearanceSprite, this, menu_selector(SettingsLayer::onAppearance));
+    appearanceBtn->setPosition({-80.f, 0.f});
+    menu->addChild(appearanceBtn);
+
+    auto serversSprite = ButtonSprite::create("Dedicated Servers", "goldFont.fnt", "GJ_button_04.png", 0.7f);
+    auto serversBtn = CCMenuItemSpriteExtra::create(serversSprite, this, menu_selector(SettingsLayer::onDedicatedServers));
+    serversBtn->setPosition({80.f, 0.f});
+    menu->addChild(serversBtn);
+
     return true;
 
+}
+
+void SettingsLayer::onAppearance(CCObject*) {
+    AppearancePopup::create()->show();
+}
+
+void SettingsLayer::onDedicatedServers(CCObject*) {
+    DedicatedServersPopup::create([](std::string const&) {
+        // keep the popup flow in the settings screen; connection handling is delegated by the popup itself
+    })->show();
 }
 
 void SettingsLayer::onBack(CCObject* sender) {

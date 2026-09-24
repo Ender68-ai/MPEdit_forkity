@@ -228,47 +228,23 @@ bool CollabLayer::init() {
     // JoinModes implementatiom
     // PublicRoomList
     
-    auto panel = NineSliceBox::create(winSize.width * 0.8f, winSize.height * 0.7f);
-    panel->setPosition({
-        winSize.width * 0.1f,
-        winSize.height * 0.1f
-    });
-    m_publicRoomList = panel;
+        m_publicRoomList = RoomList::create([this](P2PManager::RoomInfo const& room, std::string const& password) {
+            this->onJoinRoom(room, password);
+        });
+        m_publicRoomList->setPosition({winSize.width * 0.1f, winSize.height * 0.16f});
+        this->addChild(m_publicRoomList);
 
-    auto boxTitle = CCLabelBMFont::create("Public Rooms", "goldFont.fnt");
-    boxTitle->setScale(0.6f);
-    boxTitle->setPosition({
-        winSize.width * 0.4f,
-        winSize.height * 0.65f
-    });
+        auto refreshSprite = CCSprite::createWithSpriteFrameName("GJ_updateBtn_001.png");
+        refreshSprite->setScale(0.75f);
+        m_roomListButton = CCMenuItemSpriteExtra::create(
+            refreshSprite, this, menu_selector(CollabLayer::onRefreshRooms)
+        );
+        m_roomListMenu = CCMenu::create();
+        m_roomListMenu->setPosition({winSize.width * 0.9f, winSize.height * 0.14f});
+        m_roomListMenu->addChild(m_roomListButton);
+        this->addChild(m_roomListMenu);
 
-
-
-    panel->addChild(boxTitle);
-    this->addChild(panel);
     
-
-
-    /// Placeholder button (relocate for now)
-
-    auto* roomListBtnSpr = ButtonSprite::create(
-            "Multiplayer Edit", 90, true, "goldFont.fnt", "GJ_button_01.png", 30.f, 0.45f);
-
-    auto* roomListButton = CCMenuItemSpriteExtra::create(
-        roomListBtnSpr,
-        this,
-        menu_selector(CollabLayer::onMultiplayer)
-    );
-    m_roomListButton = roomListButton;
-
-    auto roomListMenu = CCMenu::create();
-    roomListMenu->setPosition({
-        winSize.width * 0.7f,
-        winSize.height * 0.15f
-    });
-    m_roomListMenu = roomListMenu;
-    roomListMenu->addChild(roomListButton);
-    this->addChild(roomListMenu);
 
 
     // HostModes implementation
@@ -289,9 +265,13 @@ bool CollabLayer::init() {
         CollabLayer::onJoinMode(nullptr);
     }
 
-
     return true;
 };
+
+void CollabLayer::onEnter() {
+    CCLayer::onEnter();
+    MultiplayerMenuPopup::showPatreonNoticeIfNeeded();
+}
 
 
 void CollabLayer::onBack(CCObject* sender) {
@@ -316,26 +296,10 @@ void CollabLayer::onSettings(CCObject*) {
     auto transition = Transition::create(0.5f, scene, {0, 0, 0});
     CCDirector::sharedDirector()->pushScene(transition);
 };
-
-void CollabLayer::updateStatus(float) {
-        auto &session = SessionManager::get();
-
-        bool online = SessionManager::get().isInSession();
-        size_t playerCount = session.getPlayers().size();
-
-
-        m_onlineSprite->setVisible(online);
-        m_offlineSprite->setVisible(!online);
-        m_playerCountLabel->setString(
-            fmt::format("{}", playerCount).c_str()
-        );
-
-};
-
 void CollabLayer::onDiscord(CCObject*) {
-        createQuickPopup(
-            "Discord",
-            "Join the <cy>Multiplayer Edit</c> Discord server?",
+    createQuickPopup(
+        "Discord",
+        "Join the <cy>Multiplayer Edit</c> Discord server?",
             "Cancel", "Join",
             [](auto, bool btn2) {
                 if (btn2) geode::utils::web::openLinkInBrowser("https://discord.gg/mdsuxYu2YP");
@@ -344,14 +308,7 @@ void CollabLayer::onDiscord(CCObject*) {
 };
 
 void CollabLayer::onPatreon(CCObject*) {
-        createQuickPopup(
-            "Patreon",
-            "Support me on <cy>Patreon</c>?",
-            "Cancel", "Open",
-            [](auto, bool btn2) {
-                if (btn2) geode::utils::web::openLinkInBrowser("https://www.patreon.com/cw/d050/membership");
-            }
-        );
+        MultiplayerMenuPopup::showPatreonPopup();
 };
 
 void CollabLayer::onWeb(CCObject*) {
@@ -366,9 +323,19 @@ void CollabLayer::onWeb(CCObject*) {
 };
 
 void CollabLayer::updateExtMenu(float dt) {
-    m_webBtn->setScale(0.3f);
+    if (m_webBtn) m_webBtn->setScale(0.3f);
 }
 
+void CollabLayer::updateStatus(float dt) {
+    auto& session = SessionManager::get();
+    bool online = session.isInSession();
+
+    if (m_onlineSprite) m_onlineSprite->setVisible(online);
+    if (m_offlineSprite) m_offlineSprite->setVisible(!online);
+    if (m_playerCountLabel) {
+        m_playerCountLabel->setString(fmt::format("{}", session.getPlayers().size()).c_str());
+    }
+}
 
 void CollabLayer::onJoinMode(CCObject*) {
 
@@ -394,9 +361,20 @@ void CollabLayer::onHostMode(CCObject*) {
 }
 
 
-void CollabLayer::onMultiplayer(CCObject*) {
-        MultiplayerMenuPopup::create()->show();
+void CollabLayer::onRefreshRooms(CCObject*) {
+    if (m_publicRoomList) m_publicRoomList->refresh();
+}
+
+void CollabLayer::onJoinRoom(P2PManager::RoomInfo const& room, std::string const& password) {
+    if (room.serverUrl.starts_with("ws://") || room.serverUrl.starts_with("wss://") || room.serverUrl.starts_with("http://") || room.serverUrl.starts_with("https://")) {
+        std::string wsUrl = room.serverUrl;
+        if (wsUrl.starts_with("http://")) wsUrl.replace(0, 7, "ws://");
+        else if (wsUrl.starts_with("https://")) wsUrl.replace(0, 8, "wss://");
+        SessionManager::get().joinDedicatedServer(wsUrl, room.roomCode, password);
+    } else {
+        SessionManager::get().joinSession(room.roomCode, Mod::get()->getSettingValue<std::string>("player-name"), password);
     }
+}
 
 
 

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-set(GEODE_PACKAGE_ZSTD ON)
+set(GEODE_PACKAGE_ZSTD OFF)
 
 project(MultiplayerEdit VERSION 0.5.0)
 

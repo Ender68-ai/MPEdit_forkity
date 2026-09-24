@@ -1,7 +1,11 @@
+#include <Geode/Geode.hpp>
+
 #include "SessionStatusNode.hpp"
 #include "../SessionManager.hpp"
 #include "../P2PManager.hpp"
-#include <Geode/Geode.hpp>
+
+
+#include "ui/utils/Panel.hpp"
 
 using namespace geode::prelude;
 
@@ -22,15 +26,19 @@ namespace mpedit {
 
         auto winSize = CCDirector::sharedDirector()->getWinSize();
 
-        this->setPosition({winSize.width - 10.f, winSize.height - 10.f});
-        this->setAnchorPoint({1.f, 1.f});
+        this->setPosition({0, 0});
+        this->setAnchorPoint({0, 0});
 
-        m_statusLabel = CCLabelBMFont::create("", "chatFont.fnt");
-        m_statusLabel->setAnchorPoint({1.f, 0.5f});
-        m_statusLabel->setScale(0.45f);
-        m_statusLabel->setPosition({0.f, 0.f});
-        m_statusLabel->setOpacity(180);
-        this->addChild(m_statusLabel);
+        m_statusText = CCLabelBMFont::create("", "goldFont.fnt");
+        m_statusText->setScale(0.45f);
+        m_statusText->setPosition({winSize.width * 0.37f, winSize.height * 0.96f});
+        this->addChild(m_statusText);
+
+        auto statusBg = Panel::create("", {winSize.width * 0.08f, winSize.height * 0.03f});
+        statusBg->setPosition({winSize.width * 0.37f, winSize.height * 0.96f});
+        this->addChild(statusBg);
+
+        
 
         this->scheduleUpdate();
 
@@ -62,7 +70,7 @@ namespace mpedit {
         m_cachedError = errStr;
 
         if (!inSession) {
-            m_statusLabel->setString("");
+            m_statusText->setString("");
             return;
         }
 
@@ -72,32 +80,30 @@ namespace mpedit {
         switch (state) {
             case P2PManager::State::Connected:
                 statusText = fmt::format(
-                    "MP: {} ({} players)",
-                    roomCode,
-                    playerCount
+                    "Connected"
                 );
-                color = {100, 255, 100};
+                color = { 255, 255, 255};
                 break;
 
             case P2PManager::State::Connecting:
             case P2PManager::State::Reconnecting:
-                statusText = "MP: Connecting...";
+                statusText = "Connecting...";
                 color = {255, 255, 100};
                 break;
 
             case P2PManager::State::Disconnected:
-                statusText = "MP: Disconnected";
+                statusText = "Disconnected";
                 color = {255, 100, 100};
                 break;
 
             case P2PManager::State::Error:
-                statusText = fmt::format("MP: Error - {}", errStr);
+                statusText = fmt::format("Error - {}", errStr);
                 color = {255, 100, 100};
                 break;
         }
 
-        m_statusLabel->setString(statusText.c_str());
-        m_statusLabel->setColor(color);
+        m_statusText->setString(statusText.c_str());
+        m_statusText->setColor(color);
     }
 
 }

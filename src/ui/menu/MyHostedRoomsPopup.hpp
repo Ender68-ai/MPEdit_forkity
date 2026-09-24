@@ -36,7 +36,7 @@ namespace mpedit {
         void onShutDown(cocos2d::CCObject*);
 
     public:
-        friend class PasswordPopup;
+        friend class ManagePasswordPopup;
         friend class MaxPlayersPopup;
         static ManageRoomPopup* create(matjson::Value const& roomObj, std::string const& url, std::string const& token);
     };

@@ -6,8 +6,6 @@
 #include "SessionManager.hpp"
 #include "P2PManager.hpp"
 #include "RemoteActionHandler.hpp"
-#include "ui/menu/MultiplayerMenuPopup.hpp"
-#include "ui/menu/CreateRoomPopup.hpp"
 
 using namespace geode::prelude;
 using namespace mpedit;
@@ -170,11 +168,4 @@ class $modify(MPEditorPauseLayer, EditorPauseLayer) {
         }
     }
 
-    void onMultiplayer(CCObject*) {
-        if (SessionManager::get().isInSession()) {
-            MultiplayerMenuPopup::create()->show();
-        } else {
-            CreateRoomPopup::create(nullptr)->show();
-        }
-    }
 };

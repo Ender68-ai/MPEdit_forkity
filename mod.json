@@ -8,7 +8,7 @@
     },
     "id": "d050.multiplayeredit",
     "name": "Multiplayer Edit",
-    "version": "v0.7.0",
+    "version": "v0.7.1",
     "developer": "d050",
     "description": "Collab with friends in real-time editing.",
     "dependencies": {
@@ -48,6 +48,13 @@
             "description": "URL of the signaling server used for connection setup. Only change this if you're self-hosting your own signaling server.",
             "default": "https://multiplayer-edit.d050.workers.dev",
             "filter": "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:/.?&=-_"
+        },
+        "ice-transport-mode": {
+            "type": "string",
+            "name": "Connection Mode",
+            "description": "How to connect to other players. Auto is recommended. STUN Only is direct connection only. TURN Only routes through a relay.",
+            "default": "Auto",
+            "one-of": ["Auto", "STUN Only", "TURN Only"]
         },
         "player-name": {
             "type": "string",
@@ -126,7 +133,8 @@
             "type": "string",
             "name": "Cloud Hosting URL (WIP)",
             "description": "The URL of the dedicated server used for uploading and hosting local levels.",
-            "default": "http://localhost:7575"
+            "default": "http://localhost:7575",
+            "filter": "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:/.?&=-_"
         },
         "cloud-auth-token": {
             "type": "string",

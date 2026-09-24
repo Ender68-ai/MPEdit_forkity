@@ -21,6 +21,7 @@ You can host **multiple levels simultaneously** on a single server instance, eac
    npm start
    ```
 3. The server will ask you where you want to load levels from:
+   - **Restore previous session:** (Appears if saved rooms exist) Restores all rooms, codes, passwords, settings, and owner tokens from `rooms.json`.
    - **My Geometry Dash Saves:** Automatically locates your `CCLocalLevels.dat` file and lists your game's levels.
    - **Local .gmd files:** Reads `.gmd` files from the `levels/` folder next to the script.
    - **Custom file path:** Paste a direct path to any `.gmd` file on your system.
@@ -38,7 +39,7 @@ By default, the server ignores this file because the `"useConfig"` setting is `0
 To automate your server:
 1. Open `config.json` and set `"useConfig": 1`.
 2. Configure the other settings:
-   - **`mode`**: Where to load levels from. Options are `"gd"` (loads from CCLocalLevels.dat), `"gmd"` (loads from the levels folder), `"custom"` (loads a specific file), or `"none"` (boots an empty server for remote uploads).
+   - **`mode`**: Where to load levels from. Options are `"restore"` (restores all previous rooms, codes, passwords, and tokens from rooms.json), `"gd"` (loads from CCLocalLevels.dat), `"gmd"` (loads from the levels folder), `"custom"` (loads a specific file), or `"none"` (boots an empty server for remote uploads).
    - **`customPath`**: The exact file path to a `.gmd` file if `mode` is set to `"custom"`.
    - **`selectedLevels`**: A list of level names to host (e.g., `["Level 1", "Level 2"]`), or `["all"]` to host everything found.
    - **`port`**: The port to host on.
@@ -49,6 +50,13 @@ To automate your server:
 3. Run `npm start`. The server will instantly start using these settings without asking any questions.
 
 If you want to easily generate a config file based on your current settings, you can start the server normally, and once it's running, type `/makeconfig` in the terminal, and it will save all your settings into `config.json` and enable it for your next boot.
+
+## Session Persistence (`rooms.json`)
+
+The dedicated server automatically tracks all hosted rooms, room codes, passwords, player limits, default view-only states, and creator auth tokens in `rooms.json`.
+- Each level save in the `levels/` directory is prefixed with the room code (e.g., `X9K2PW_LevelName_save.gmd`), preventing file collisions between levels with identical names.
+- When the server shuts down or restarts, room state is preserved. You can resume previous rooms by choosing **Restore previous session** in the startup prompt or by setting `"mode": "restore"` in `config.json`.
+- All previous room codes stay identical, so player invite URLs remain valid across restarts.
 
 ## Playing over the Internet
 
@@ -79,7 +87,7 @@ This gives you a URL like `https://my-server.loca.lt`. Use it to connect in-game
 2. Click **Add Server** and enter the server's URL. If the server is hosting multiple levels, append the room code to the URL: `ws://your-ip:7575/ABCD12`
 3. Click **Join**.
 
-If the server is only hosting a single level, you can connect without a room code and it will automatically join that level.
+If the server is only hosting a single level, you can connect without a room code and it will automatically join that level. If the server is hosting multiple levels, you must specify the room code in the URL.
 
 *Note: To actually save the multiplayer level to your device, open the Editor Pause Menu and click **Save**. The dedicated server will always save and store levels independently in the levels folder and will never overwrite your local game level files.*
 

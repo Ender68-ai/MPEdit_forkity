@@ -61,6 +61,7 @@ namespace mpedit {
         static inline MultiplayerMenuPopup* s_instance = nullptr;
         static MultiplayerMenuPopup* create();
         static void showPatreonNoticeIfNeeded();
+        static void showPatreonPopup();
         static void checkUpdatesAndPatreon();
         void showHeaderUpdateButton();
         void hideHeaderUpdateButton();

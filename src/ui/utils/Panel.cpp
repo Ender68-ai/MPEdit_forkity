@@ -21,9 +21,11 @@ bool Panel::init(const char* title, CCSize size) {
     bg->setColor({139, 69, 19});
     addChild(bg);
 
-    auto label = CCLabelBMFont::create(title, "bigFont.fnt");
+    if (title && title[0] != '\0') {
+    auto* label = CCLabelBMFont::create(title, "bigFont.fnt");
     label->setPosition({size.width / 4.f, size.height - 50.f});
     addChild(label);
+    }
 
     return true;
 }

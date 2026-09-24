@@ -4,15 +4,17 @@ const CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const ROOM_TTL = 2 * 60 * 60 * 1000;
 const STALE_PING_TTL = 5 * 60 * 1000;
 
+const HEADERS = {
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, ngrok-skip-browser-warning, Bypass-Tunnel-Reminder",
+};
+
 function json(data, status = 200) {
     return new Response(JSON.stringify(data), {
         status,
-        headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, ngrok-skip-browser-warning, Bypass-Tunnel-Reminder",
-        },
+        headers: HEADERS,
     });
 }
 
@@ -20,10 +22,15 @@ export class SignalingHub extends DurableObject {
     constructor(ctx, env) {
         super(ctx, env);
         this.ctx = ctx;
+        this.env = env;
         this.rooms = new Map();
         this.queues = new Map();
         this.waiters = new Map();
         this.lastSaveTime = 0;
+        this.lastCleanup = 0;
+        this.cachedTurnServers = null;
+        this.cachedTurnExpiry = 0;
+        this.lastTurnError = 0;
 
         this.ctx.blockConcurrencyWhile(async () => {
             try {
@@ -37,16 +44,14 @@ export class SignalingHub extends DurableObject {
         });
     }
 
-    async saveRooms(force = false) {
+    saveRooms(force = false) {
         const now = Date.now();
-        if (!force && now - this.lastSaveTime < 60000) return;
+        if (!force && now - this.lastSaveTime < 10000) return;
         this.lastSaveTime = now;
         try {
             const obj = Object.fromEntries(this.rooms);
-            await this.ctx.storage.put("rooms", obj);
-        } catch (err) {
-            console.error("Failed to persist rooms to storage:", err);
-        }
+            this.ctx.storage.put("rooms", obj).catch(() => {});
+        } catch {}
     }
 
     genCode() {
@@ -63,6 +68,9 @@ export class SignalingHub extends DurableObject {
 
     cleanupStale() {
         const now = Date.now();
+        if (now - this.lastCleanup < 60000) return;
+        this.lastCleanup = now;
+
         let changed = false;
         for (const [code, room] of this.rooms.entries()) {
             if (now - room.created > ROOM_TTL || (room.lastPing && now - room.lastPing > 10 * 60 * 1000)) {
@@ -106,24 +114,114 @@ export class SignalingHub extends DurableObject {
             return;
         }
 
-        if (!this.queues.has(key)) {
-            this.queues.set(key, []);
+        let q = this.queues.get(key);
+        if (!q) {
+            q = [];
+            this.queues.set(key, q);
         }
-        this.queues.get(key).push({
-            id: Date.now() + "_" + crypto.randomUUID(),
-            msg,
-            timestamp: Date.now(),
-        });
+        if (q.length >= 50) {
+            q.shift();
+        }
+        q.push(msg);
     }
 
     dequeue(code, queueName) {
         const key = `${code}:${queueName}`;
         const queue = this.queues.get(key);
         if (!queue || queue.length === 0) return [];
-
-        const msgs = queue.map(entry => entry.msg);
         this.queues.delete(key);
-        return msgs;
+        return queue;
+    }
+
+    async getTurnServers() {
+        const now = Date.now();
+        if (this.cachedTurnServers && now < this.cachedTurnExpiry) {
+            return this.cachedTurnServers;
+        }
+
+        if (now - this.lastTurnError < 30000) {
+            return null;
+        }
+
+        if (this.env && this.env.METERED_APP_NAME && this.env.METERED_API_KEY) {
+            try {
+                const resp = await fetch(
+                    `https://${this.env.METERED_APP_NAME}.metered.live/api/v1/turn/credentials?apiKey=${this.env.METERED_API_KEY}`
+                );
+                if (resp.ok) {
+                    const data = await resp.json();
+                    const list = Array.isArray(data) ? data : (data.iceServers || []);
+                    const normalized = [];
+                    for (const s of list) {
+                        const urls = Array.isArray(s.urls) ? s.urls : [s.urls || s.url];
+                        for (const u of urls) {
+                            if (u && typeof u === "string" && (u.startsWith("turn:") || u.startsWith("turns:"))) {
+                                normalized.push({
+                                    urls: u,
+                                    username: s.username || "",
+                                    credential: s.credential || "",
+                                });
+                            }
+                        }
+                    }
+                    if (normalized.length > 0) {
+                        this.cachedTurnServers = normalized;
+                        this.cachedTurnExpiry = now + 12 * 60 * 60 * 1000;
+                        return normalized;
+                    }
+                }
+            } catch {}
+        }
+
+        const turnKeyId = this.env?.TURN_KEY_ID;
+        const turnApiToken = this.env?.TURN_KEY_API_TOKEN;
+
+        if (turnKeyId && turnApiToken) {
+            try {
+                const resp = await fetch(
+                    `https://rtc.live.cloudflare.com/v1/turn/keys/${turnKeyId}/credentials/generate-ice-servers`,
+                    {
+                        method: "POST",
+                        headers: {
+                            "Authorization": `Bearer ${turnApiToken}`,
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({ ttl: 86400 }),
+                    }
+                );
+
+                if (resp.ok) {
+                    const data = await resp.json();
+                    const iceServers = data.iceServers;
+                    if (iceServers) {
+                        const normalized = [];
+                        const serverList = Array.isArray(iceServers) ? iceServers : [iceServers];
+
+                        for (const s of serverList) {
+                            const urls = Array.isArray(s.urls) ? s.urls : [s.urls || s.url];
+                            for (const u of urls) {
+                                if (u && typeof u === "string" && (u.startsWith("turn:") || u.startsWith("turns:"))) {
+                                    normalized.push({
+                                        urls: u,
+                                        username: s.username || "",
+                                        credential: s.credential || "",
+                                    });
+                                }
+                            }
+                        }
+
+                        if (normalized.length > 0) {
+                            this.cachedTurnServers = normalized;
+                            this.cachedTurnExpiry = now + 12 * 60 * 60 * 1000;
+                            return normalized;
+                        }
+                    }
+                }
+            } catch {}
+        }
+
+        this.lastTurnError = now;
+        return null;
     }
 
     async fetch(req) {
@@ -203,8 +301,12 @@ export class SignalingHub extends DurableObject {
             };
 
             this.rooms.set(code, roomObj);
-            await this.saveRooms(true);
-            return json({ roomCode: code, roomId });
+            this.saveRooms(true);
+
+            const turnServers = await this.getTurnServers();
+            const resData = { roomCode: code, roomId };
+            if (turnServers) resData.turnServers = turnServers;
+            return json(resData);
         }
 
         const code = parts[1]?.toUpperCase();
@@ -223,7 +325,7 @@ export class SignalingHub extends DurableObject {
 
         if (parts.length === 2 && req.method === "DELETE") {
             this.deleteRoom(code);
-            await this.saveRooms(true);
+            this.saveRooms(true);
             return json({ ok: true });
         }
 
@@ -249,9 +351,12 @@ export class SignalingHub extends DurableObject {
 
             const joinMsg = { type: "client_joined", playerId, playerName };
             this.enqueue(code, "hostQueue", joinMsg);
-            await this.saveRooms(true);
+            this.saveRooms();
 
-            return json({ playerId, hostName: room.hostName });
+            const turnServers = await this.getTurnServers();
+            const resData = { playerId, hostName: room.hostName };
+            if (turnServers) resData.turnServers = turnServers;
+            return json(resData);
         }
 
         if (action === "ban" && req.method === "POST") {
@@ -262,7 +367,7 @@ export class SignalingHub extends DurableObject {
             if (!room.banned) room.banned = [];
             if (!room.banned.includes(playerName)) {
                 room.banned.push(playerName);
-                await this.saveRooms(true);
+                this.saveRooms();
             }
             return json({ ok: true });
         }
@@ -273,7 +378,7 @@ export class SignalingHub extends DurableObject {
             if (!room) return json({ error: "room not found" }, 404);
 
             room.players = room.players.filter(p => p.id !== playerId);
-            await this.saveRooms(true);
+            this.saveRooms();
             return json({ ok: true });
         }
 
@@ -285,7 +390,6 @@ export class SignalingHub extends DurableObject {
             const room = this.rooms.get(code);
             if (role === "host" && room) {
                 room.lastPing = Date.now();
-                this.saveRooms(false);
             }
 
             const initialMsgs = this.dequeue(code, queueName);
@@ -401,14 +505,41 @@ const LANDING_HTML = `<!DOCTYPE html>
 
         updatePing();
         updateRooms();
-        setInterval(updatePing, 1000);
-        setInterval(updateRooms, 5000);
+        setInterval(() => {
+            if (!document.hidden) {
+                updatePing();
+                updateRooms();
+            }
+        }, 15000);
     </script>
 </body>
 </html>`;
 
 export default {
     async fetch(request, env) {
+        if (request.method === "OPTIONS") {
+            return json({ ok: true });
+        }
+
+        const url = new URL(request.url);
+        const parts = url.pathname.split("/").filter(Boolean);
+
+        if (parts.length === 0 && request.method === "GET") {
+            if (request.headers.get("accept")?.includes("application/json")) {
+                return json({ status: "ok", service: "multiplayer-edit-signaling" });
+            }
+            return new Response(LANDING_HTML, {
+                headers: {
+                    "Content-Type": "text/html; charset=utf-8",
+                    "Cache-Control": "no-cache",
+                },
+            });
+        }
+
+        if (parts[0] === "health" && request.method === "GET") {
+            return json({ status: "ok" });
+        }
+
         const id = env.SIGNALING_HUB.idFromName("global_signaling_hub");
         const stub = env.SIGNALING_HUB.get(id);
         return stub.fetch(request);

@@ -2,15 +2,17 @@
 
 #include <Geode/Geode.hpp>
 
-#include "../utils/NineSlice.hpp"
+#include "../../P2PManager.hpp"
 #include "modes/HostMode.hpp"
-
+#include "modes/JoinMode.hpp"
 
 using namespace geode::prelude;
+using namespace mpedit;
 
 class CollabLayer : public CCLayer, public TableViewCellDelegate {
 protected:
     bool init() override;
+    void onEnter() override;
     void onBack(CCObject*);
     void onSettings(CCObject*);
     void updateStatus(float dt);
@@ -48,12 +50,13 @@ public:
     void onHostMode(CCObject*);
     void onJoinMode(CCObject*);
 
-    void onMultiplayer(CCObject*);
+    void onRefreshRooms(CCObject*);
+    void onJoinRoom(P2PManager::RoomInfo const&, std::string const& password);
 
    
-    CCMenu* m_roomListMenu;
-    NineSliceBox* m_publicRoomList;
-    CCMenuItemSpriteExtra* m_roomListButton;
+    CCMenu* m_roomListMenu = nullptr;
+    RoomList* m_publicRoomList = nullptr;
+    CCMenuItemSpriteExtra* m_roomListButton = nullptr;
 
 };
 

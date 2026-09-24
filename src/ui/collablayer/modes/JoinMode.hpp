@@ -1,16 +1,29 @@
 #pragma once
 
 #include <Geode/Geode.hpp>
+#include "../../../P2PManager.hpp"
+#include <functional>
 
 using namespace cocos2d;
 using namespace geode::prelude;
+using namespace mpedit;
 
-class RoomList {
+class RoomList : public cocos2d::CCNode {
+public:
+    using JoinCallback = std::function<void(P2PManager::RoomInfo const&, std::string const&)>;
+
 protected:
-    
+    JoinCallback m_onJoin;
+    geode::ScrollLayer* m_scroll = nullptr;
+
+    bool init(std::function<void(P2PManager::RoomInfo const&, std::string const&)> onJoin);
+    void fetchRooms();
+    void populateRooms(std::vector<P2PManager::RoomInfo> const& rooms);
+    void onRefresh(cocos2d::CCObject*);
 
 public:
-    static RoomList* create();
+    static RoomList* create(JoinCallback onJoin);
+    void refresh();
 };
 
 

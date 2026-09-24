@@ -7,6 +7,8 @@ public:
     static NineSliceBox* create(float width, float height);
 
     void setSize(float width, float height);
+    void setOpacity(GLubyte opacity);
+    void setColor(const cocos2d::ccColor3B& color);
     void animateResize(float targetWidth, float targetHeight, float duration);
 
 private:

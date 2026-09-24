@@ -1,5 +1,18 @@
+# 0.7.1
+- Added options in settings to manually choose between STUN and TURN connections.
+- Added persistent room sessions for dedicated servers through rooms.json. Options also added to config.json.
+- Fixed TURN servers not working as intended.
+- Fixed crash when trying to set or change a password on a dedicated server through managing hosted rooms.
+- Fixed objects duplicating when joining a dedicated server.
+- Fixed joining dedicated servers without a room code defaulting to the first hosted room when multiple rooms are available. Now prompts to enter the room code in the URL instead.
+- Fixed dedicated server CLI becoming unresponsive after using the /host command.
+- Reduced Patreon support popup wait time.
+- Fixed "delete all" buttons not syncing for other players.
+- Fixed special characters being impossible to type in the cloud URL in the mod settings (oops).
+- Optimized worker.js some more.
+
 # 0.7.0
-- Automatic Mod Updates! You can now update the mod completley in-game, no need to manually replace the .geode file for every update!
+- Automatic Mod Updates! You can now update the mod completely in-game, no need to manually replace the .geode file for every update!
 - Cursor Customization! You can now change your cursors look and color. You can do this in the mod settings.
 - Anti Griefing Features! Hosts can now revert any player's changes from the player list.
 - Added a "Recent" players menu so hosts can still ban and revert griefers even after they leave the session.

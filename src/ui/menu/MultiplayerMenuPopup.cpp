@@ -25,7 +25,7 @@ using namespace geode::prelude;
 namespace mpedit {
 
 
-    class PasswordPopup : public BasePopup {
+    class JoinPasswordPopup : public BasePopup {
     protected:
         geode::TextInput* m_input = nullptr;
         P2PManager::RoomInfo m_room;
@@ -43,7 +43,7 @@ namespace mpedit {
             m_mainLayer->addChild(m_input);
 
             auto joinBtnSprite = ButtonSprite::create("Join", "goldFont.fnt", "GJ_button_01.png", 0.6f);
-            auto joinBtn = CCMenuItemSpriteExtra::create(joinBtnSprite, this, menu_selector(PasswordPopup::onJoin));
+            auto joinBtn = CCMenuItemSpriteExtra::create(joinBtnSprite, this, menu_selector(JoinPasswordPopup::onJoin));
             joinBtn->setPosition(this->fromBottom(25.f));
             m_uiMenu->addChild(joinBtn);
 
@@ -66,8 +66,8 @@ namespace mpedit {
         }
 
     public:
-        static PasswordPopup* create(P2PManager::RoomInfo const& room, MultiplayerMenuPopup* parent) {
-            auto ret = new PasswordPopup();
+        static JoinPasswordPopup* create(P2PManager::RoomInfo const& room, MultiplayerMenuPopup* parent) {
+            auto ret = new JoinPasswordPopup();
             if (ret->init(room, parent)) {
                 ret->autorelease();
                 return ret;
@@ -287,7 +287,7 @@ namespace mpedit {
     protected:
         bool m_canClose = false;
         float m_timer = 0.f;
-        int m_lastSeconds = 5;
+        int m_lastSeconds = 3;
         ButtonSprite* m_laterSpr = nullptr;
         CCMenuItemSpriteExtra* m_laterBtn = nullptr;
         TextArea* m_textArea = nullptr;
@@ -327,7 +327,7 @@ namespace mpedit {
             btnMenu->setLayout(RowLayout::create()->setAxisAlignment(AxisAlignment::Center)->setGap(15.f));
             m_mainLayer->addChild(btnMenu);
 
-            m_laterSpr = ButtonSprite::create("Wait (5)", "goldFont.fnt", "GJ_button_06.png", 0.8f);
+            m_laterSpr = ButtonSprite::create("Wait (3)", "goldFont.fnt", "GJ_button_06.png", 0.8f);
             m_laterBtn = CCMenuItemSpriteExtra::create(m_laterSpr, this, menu_selector(PatreonPopup::onClose));
             m_laterBtn->setEnabled(false);
             btnMenu->addChild(m_laterBtn);
@@ -345,7 +345,7 @@ namespace mpedit {
 
         void update(float dt) override {
             m_timer += dt;
-            int remaining = 5 - static_cast<int>(m_timer);
+            int remaining = 3 - static_cast<int>(m_timer);
             if (remaining <= 0) {
                 m_canClose = true;
                 if (m_laterBtn) m_laterBtn->setEnabled(true);
@@ -2117,9 +2117,15 @@ namespace mpedit {
                         geode::Notification::create("Server has no active levels hosted with that code", geode::NotificationIcon::Warning)->show();
                     }
                 } else {
-                    auto room = rooms[0];
-                    room.serverUrl = urlWithoutCode;
-                    safeThis->onJoinRoom(room);
+                    if (rooms.size() == 1) {
+                        auto room = rooms[0];
+                        room.serverUrl = urlWithoutCode;
+                        safeThis->onJoinRoom(room);
+                    } else {
+                        safeThis->clearCenter();
+                        if (safeThis->m_browserUiNode) safeThis->m_browserUiNode->setVisible(true);
+                        geode::Notification::create("Please specify the room code in the URL (e.g., https://host:port/CODE).", geode::NotificationIcon::Warning)->show();
+                    }
                 }
             }, urlWithoutCode);
         })->show();
@@ -2455,7 +2461,7 @@ namespace mpedit {
     }
 
     void MultiplayerMenuPopup::promptPassword(P2PManager::RoomInfo const& room) {
-        if (auto p = PasswordPopup::create(room, this)) {
+        if (auto p = JoinPasswordPopup::create(room, this)) {
             p->show();
         }
     }

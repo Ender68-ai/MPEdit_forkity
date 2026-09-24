@@ -159,6 +159,12 @@ namespace mpedit {
             std::string mid;
         };
 
+        struct TurnServerInfo {
+            std::string urls;
+            std::string username;
+            std::string credential;
+        };
+
         struct PeerInfo {
             std::shared_ptr<rtc::PeerConnection> pc;
             std::shared_ptr<rtc::DataChannel> reliable;
@@ -204,7 +210,7 @@ namespace mpedit {
         std::string m_error;
         mutable std::mutex m_stateMutex;
         RoomSettings m_settings;
-
+        std::vector<TurnServerInfo> m_turnServers;
 
         std::unordered_map<int, PeerInfo> m_peers;
         std::mutex m_peersMutex;

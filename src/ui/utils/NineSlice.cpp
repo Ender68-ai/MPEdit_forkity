@@ -19,19 +19,20 @@ bool NineSliceBox::init(float width, float height) {
         return false;
 
     m_bg = geode::NineSlice::create(
-        "GJ_square01.png",
+        "square02_001.png",
         {},
         {
-            .top = 10.f,
-            .right = 10.f,
-            .bottom = 10.f,
-            .left = 10.f
+            .top = 12.f,
+            .right = 12.f,
+            .bottom = 12.f,
+            .left = 12.f
         }
     );
 
     m_bg->setContentSize({width, height});
     m_bg->setAnchorPoint({0, 0});
-    m_bg->setOpacity(255);
+    m_bg->setOpacity(180);
+    m_bg->setColor({255, 255, 255});
 
     this->addChild(m_bg);
 
@@ -40,6 +41,14 @@ bool NineSliceBox::init(float width, float height) {
 
 void NineSliceBox::setSize(float width, float height) {
     m_bg->setContentSize({width, height});
+}
+
+void NineSliceBox::setOpacity(GLubyte opacity) {
+    if (m_bg) m_bg->setOpacity(opacity);
+}
+
+void NineSliceBox::setColor(const cocos2d::ccColor3B& color) {
+    if (m_bg) m_bg->setColor(color);
 }
 
 void NineSliceBox::animateResize(
