@@ -1960,7 +1960,54 @@ class $modify(MPEditorUI, EditorUI) {
 };
 
 class $modify(MPBaseGameLayer, GJBaseGameLayer) {
+    void removeObjectFromSection(GameObject* obj) {
+        if (!obj) return;
+
+        auto clear = [&]() {
+            obj->m_someOtherIndex = -1;
+            obj->m_innerSectionIndex = -1;
+            obj->m_outerSectionIndex = -1;
+            obj->m_middleSectionIndex = -1;
+        };
+
+        int x = obj->m_outerSectionIndex;
+        int y = obj->m_middleSectionIndex;
+        int idx = obj->m_someOtherIndex;
+
+        if (x < 0 || y < 0 || idx < 0 || static_cast<size_t>(x) >= m_sectionSizes.size()) {
+            clear();
+            return;
+        }
+
+        auto* sizes = m_sectionSizes[x];
+        if (!sizes || static_cast<size_t>(y) >= sizes->size() || (*sizes)[y] <= 0 || idx >= (*sizes)[y]) {
+            clear();
+            return;
+        }
+
+        if (static_cast<size_t>(x) >= m_sections.size() || !m_sections[x]) {
+            clear();
+            return;
+        }
+
+        auto* secs = m_sections[x];
+        if (static_cast<size_t>(y) >= secs->size() || !(*secs)[y]) {
+            clear();
+            return;
+        }
+
+        auto* vec = (*secs)[y];
+        if (idx >= static_cast<int>(vec->size()) || (*vec)[idx] != obj) {
+            clear();
+            return;
+        }
+
+        GJBaseGameLayer::removeObjectFromSection(obj);
+        clear();
+    }
+
     void addToSection(GameObject* obj) {
+        if (!obj) return;
         GJBaseGameLayer::addToSection(obj);
 
         if (s_previewDepth > 0) return;

@@ -1,3 +1,6 @@
+# 0.7.3
+- Fixed crash when playtesting after an object is placed by another player.
+
 # 0.7.2
 - Fixed major issue where leaving a session saves the level into your game.
 - Fixed the update popup having some weird button formatting when updating the mod.

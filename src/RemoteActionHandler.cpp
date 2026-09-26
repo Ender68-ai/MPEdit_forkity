@@ -33,9 +33,13 @@ namespace mpedit {
             return existing;
         }
 
-        std::vector<GameObject*> createObjectsFromSaveStringRobust(LevelEditorLayer* editor, std::string const& saveStr) {
+        std::vector<GameObject*> createObjectsFromSaveStringRobust(LevelEditorLayer* editor, std::string saveStr) {
             std::vector<GameObject*> newObjects;
             if (!editor || saveStr.empty()) return newObjects;
+
+            if (saveStr.back() != ';') {
+                saveStr.push_back(';');
+            }
 
             auto* arr = editor->createObjectsFromString(saveStr, true, true);
             if (arr) {
@@ -549,12 +553,8 @@ namespace mpedit {
                     }
 
                     for (auto* createdObj : newObjs) {
-                        if (createdObj->m_editorLayer != objData.editorLayer || createdObj->m_editorLayer2 != objData.editorLayer2) {
-                            editor->removeObjectFromSection(createdObj);
-                            createdObj->m_editorLayer = objData.editorLayer;
-                            createdObj->m_editorLayer2 = objData.editorLayer2;
-                            editor->addToSection(createdObj);
-                        }
+                        createdObj->m_editorLayer = objData.editorLayer;
+                        createdObj->m_editorLayer2 = objData.editorLayer2;
                     }
 
                     applyTransformSafe(obj, objData.rotation, objData.scaleX, objData.scaleY, objData.flipX, objData.flipY);
@@ -590,13 +590,6 @@ namespace mpedit {
             if (!obj) {
                 log::warn("RemoteActionHandler: Failed to create object ID {}", objData.objectID);
                 continue;
-            }
-
-            if (obj->m_editorLayer != objData.editorLayer || obj->m_editorLayer2 != objData.editorLayer2) {
-                editor->removeObjectFromSection(obj);
-                obj->m_editorLayer = objData.editorLayer;
-                obj->m_editorLayer2 = objData.editorLayer2;
-                editor->addToSection(obj);
             }
 
             applyTransformSafe(obj, objData.rotation, objData.scaleX, objData.scaleY, objData.flipX, objData.flipY);
