@@ -1,4 +1,5 @@
-# 0.7.3
+# 0.7.2-geoderelease
+- Removed auto-updater to comply with Geode guidelines.
 - Fixed crash when playtesting after an object is placed by another player.
 
 # 0.7.2

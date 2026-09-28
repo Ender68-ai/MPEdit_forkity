@@ -608,7 +608,7 @@ namespace mpedit {
     void P2PManager::pollSignalOnce(std::string const& code, std::string const& role, int playerId) {
         if (!m_signalingActive.load()) return;
 
-        float timeoutSec = 1.0f;
+        float timeoutSec = 20.0f;
 
         auto url = getSignalingUrl() + "/rooms/" + code + "/signal?role=" + role + "&playerId=" + std::to_string(playerId) + "&timeout=" + std::to_string(static_cast<int>(timeoutSec * 1000));
 
@@ -629,9 +629,9 @@ namespace mpedit {
                 }
 
                 if (m_signalingActive.load()) {
-                    float delay = 25.0f;
+                    float delay = 1.0f;
                     if (std::chrono::steady_clock::now() < m_fastPollEndTime) {
-                        delay = 1.0f;
+                        delay = 0.1f;
                     }
                     
                     std::thread([this, code, role, playerId, delay]() {
