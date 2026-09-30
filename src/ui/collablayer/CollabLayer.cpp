@@ -268,12 +268,6 @@ bool CollabLayer::init() {
     return true;
 };
 
-void CollabLayer::onEnter() {
-    CCLayer::onEnter();
-    MultiplayerMenuPopup::showPatreonNoticeIfNeeded();
-}
-
-
 void CollabLayer::onBack(CCObject* sender) {
     auto& session = SessionManager::get();
 
@@ -326,6 +320,10 @@ void CollabLayer::updateExtMenu(float dt) {
     if (m_webBtn) m_webBtn->setScale(0.3f);
 }
 
+void CollabLayer::showPatreonNotice(float) {
+    MultiplayerMenuPopup::showPatreonNoticeIfNeeded();
+}
+
 void CollabLayer::updateStatus(float dt) {
     auto& session = SessionManager::get();
     bool online = session.isInSession();
@@ -346,6 +344,8 @@ void CollabLayer::onJoinMode(CCObject*) {
     m_roomListButton->setVisible(true);
 
     m_hostMode->setVisible(false);
+
+    this->scheduleOnce(schedule_selector(CollabLayer::showPatreonNotice), 0.6f);
 
 }
 

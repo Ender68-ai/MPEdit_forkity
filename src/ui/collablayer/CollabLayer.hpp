@@ -12,7 +12,6 @@ using namespace mpedit;
 class CollabLayer : public CCLayer, public TableViewCellDelegate {
 protected:
     bool init() override;
-    void onEnter() override;
     void onBack(CCObject*);
     void onSettings(CCObject*);
     void updateStatus(float dt);
@@ -26,6 +25,7 @@ protected:
     void onWeb(CCObject*);
 
     void updateExtMenu(float dt);
+    void showPatreonNotice(float dt);
 
     CCNode* m_webBtn;
 

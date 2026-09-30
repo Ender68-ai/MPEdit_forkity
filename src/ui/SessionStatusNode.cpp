@@ -30,12 +30,13 @@ namespace mpedit {
         this->setAnchorPoint({0, 0});
 
         m_statusText = CCLabelBMFont::create("", "goldFont.fnt");
-        m_statusText->setScale(0.45f);
+        m_statusText->setScale(0.4f);
         m_statusText->setPosition({winSize.width * 0.37f, winSize.height * 0.96f});
         this->addChild(m_statusText);
 
-        auto statusBg = Panel::create("", {winSize.width * 0.08f, winSize.height * 0.03f});
+        auto statusBg = Panel::create("", {winSize.width * 0.08f, winSize.height * 0.01f});
         statusBg->setPosition({winSize.width * 0.37f, winSize.height * 0.96f});
+        statusBg->setScaleY(0.3f);
         this->addChild(statusBg);
 
         

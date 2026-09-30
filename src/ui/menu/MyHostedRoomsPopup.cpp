@@ -359,6 +359,7 @@ protected:
         
         int maxPlayers = 100;
         try {
+            // @geode-ignore(geode-alternative)
             maxPlayers = std::stoi(std::string(m_input->getString()));
         } catch(...) {}
         body["maxPlayers"] = maxPlayers;

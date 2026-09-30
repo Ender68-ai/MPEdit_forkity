@@ -63,6 +63,7 @@ void UploadServerPopup::onHost(CCObject*) {
     int maxPlayers = 100;
     if (!maxPlayersStr.empty()) {
         try {
+            // @geode-ignore(geode-alternative)
             maxPlayers = std::stoi(maxPlayersStr);
         } catch(...) {}
     }
