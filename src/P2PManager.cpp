@@ -341,6 +341,7 @@ namespace mpedit {
                     std::lock_guard lock(m_peersMutex);
                     auto it = m_peers.find(fromPlayerId);
                     if (it != m_peers.end()) {
+                        it->second.playerName = pj.name;
                         it->second.colorIndex = pj.colorIndex;
                         it->second.iconStr = pj.iconStr;
                     }
@@ -465,6 +466,8 @@ namespace mpedit {
         matjson::Value body = matjson::makeObject({
             {"action", "create"},
             {"hostName", playerName},
+            {"iconStr", buildLocalIconStr()},
+            {"colorIndex", getLocalSavedCursorColor()},
             {"roomName", settings.roomName},
             {"description", settings.description},
             {"playerLimit", settings.playerLimit},
@@ -604,7 +607,7 @@ namespace mpedit {
     void P2PManager::pollSignalOnce(std::string const& code, std::string const& role, int playerId) {
         if (!m_signalingActive.load()) return;
 
-        float timeoutSec = 1.0f;
+        float timeoutSec = 20.0f;
 
         auto url = getSignalingUrl() + "/rooms/" + code + "/signal?role=" + role + "&playerId=" + std::to_string(playerId) + "&timeout=" + std::to_string(static_cast<int>(timeoutSec * 1000));
 
@@ -625,9 +628,9 @@ namespace mpedit {
                 }
 
                 if (m_signalingActive.load()) {
-                    float delay = 25.0f;
+                    float delay = 1.0f;
                     if (std::chrono::steady_clock::now() < m_fastPollEndTime) {
-                        delay = 1.0f;
+                        delay = 0.1f;
                     }
                     
                     std::thread([this, code, role, playerId, delay]() {
@@ -642,7 +645,7 @@ namespace mpedit {
     }
 
     void P2PManager::extendFastPoll() {
-        m_fastPollEndTime = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+        m_fastPollEndTime = std::chrono::steady_clock::now() + std::chrono::seconds(8);
     }
 
     void P2PManager::stopSignalPolling() {
@@ -871,6 +874,8 @@ namespace mpedit {
                     auto json = res.json().unwrapOr(matjson::Value());
                     m_localPlayerId = json.get<int>("playerId").unwrapOr(-1);
                     auto hostName = json.get<std::string>("hostName").unwrapOr("Host");
+                    auto hostIconStr = json.get<std::string>("hostIconStr").unwrapOr("");
+                    int hostColorIndex = json.get<int>("hostColorIndex").unwrapOr(0);
 
                     if (m_localPlayerId < 0) {
                         std::vector<ErrorCb> callbacks;
@@ -892,7 +897,7 @@ namespace mpedit {
                     auto timerFlag = m_waitingTimerFlag;
                     
                     std::thread([this, attemptId, timerFlag]() {
-                        int secondsLeft = 30;
+                        int secondsLeft = 8;
                         while (secondsLeft > 0 && timerFlag->load() && m_connectionAttemptId.load() == attemptId) {
                             geode::queueInMainThread([this, attemptId, timerFlag, secondsLeft]() {
                                 if (timerFlag->load() && m_connectionAttemptId.load() == attemptId) {
@@ -932,7 +937,8 @@ namespace mpedit {
                     hostPeer.pc = pc;
                     hostPeer.playerId = 0;
                     hostPeer.playerName = hostName;
-                    hostPeer.colorIndex = 0;
+                    hostPeer.colorIndex = hostColorIndex;
+                    hostPeer.iconStr = hostIconStr;
 
                     int myId = m_localPlayerId;
 
@@ -1128,6 +1134,18 @@ namespace mpedit {
                     {
                         std::lock_guard lock(m_stateMutex);
                         m_error = "Room not found";
+                        m_state.store(State::Error);
+                        callbacks = m_onError;
+                        err = m_error;
+                    }
+                    for (auto& cb : callbacks) cb(err);
+                    m_signalingActive = false;
+                } else if (res.code() == 410) {
+                    std::vector<ErrorCb> callbacks;
+                    std::string err;
+                    {
+                        std::lock_guard lock(m_stateMutex);
+                        m_error = "Lobby is no longer active";
                         m_state.store(State::Error);
                         callbacks = m_onError;
                         err = m_error;

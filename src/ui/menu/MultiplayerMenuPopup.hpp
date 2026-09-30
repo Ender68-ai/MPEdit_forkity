@@ -21,13 +21,11 @@ namespace mpedit {
         geode::ScrollLayer* m_scrollLayer = nullptr;
         
         CCMenuItemSpriteExtra* m_hostBtn = nullptr;
-        CCMenuItemSpriteExtra* m_headerUpdateBtn = nullptr;
         geode::TextInput* m_codeInput = nullptr;
         cocos2d::CCNode* m_browserUiNode = nullptr;
         std::string m_lastJoinCode;
         std::string m_lastServerUrl;
         bool m_isConnecting = false;
-        geode::async::TaskHolder<geode::utils::web::WebResponse> m_updateTask;
 
 
         bool init() override;
@@ -38,7 +36,6 @@ namespace mpedit {
         void createFlavorLabel(cocos2d::CCPoint const& pos);
         void cycleFlavorText();
         void clearCenter();
-        void onUpdateCheckTimeout(float);
 
         void onRefresh(cocos2d::CCObject*);
         void onHostForm(cocos2d::CCObject*);
@@ -52,9 +49,7 @@ namespace mpedit {
         void onCustomizeAppearance(cocos2d::CCObject*);
         void onDisconnectedPlayers(cocos2d::CCObject*);
         void onRollback(cocos2d::CCObject*);
-        void onHeaderUpdate(cocos2d::CCObject*);
 
-        void fetchRooms();
         void populateRooms(std::vector<P2PManager::RoomInfo> const& rooms);
 
     public:
@@ -73,6 +68,7 @@ namespace mpedit {
         void onConnecting();
         void updateStatus(std::string const& status);
         void update(float dt) override;
+        void onClose(cocos2d::CCObject* sender = nullptr) override;
         void forceClose() { this->onClose(nullptr); }
     };
 

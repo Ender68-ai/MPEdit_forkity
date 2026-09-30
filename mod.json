@@ -8,7 +8,7 @@
     },
     "id": "d050.multiplayeredit",
     "name": "Multiplayer Edit",
-    "version": "v0.7.1",
+    "version": "v0.7.3-prerelease",
     "developer": "d050",
     "description": "Collab with friends in real-time editing.",
     "dependencies": {
@@ -111,12 +111,6 @@
             "type": "bool",
             "name": "Chat Filter",
             "description": "Filters profanity in lobby names and chat.",
-            "default": true
-        },
-        "check-updates": {
-            "type": "bool",
-            "name": "Check for Updates",
-            "description": "Automatically check for newer versions when opening the Multiplayer menu.",
             "default": true
         },
         "funny-loading-messages": {

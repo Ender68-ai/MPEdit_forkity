@@ -9,6 +9,9 @@
 #include <Geode/loader/Mod.hpp>
 #include <Geode/Geode.hpp>
 #include <Geode/ui/Notification.hpp>
+#include <Geode/binding/GameLevelManager.hpp>
+#include <Geode/binding/LevelBrowserLayer.hpp>
+#include <Geode/binding/GJSearchObject.hpp>
 #include <sstream>
 
 using namespace geode::prelude;
@@ -247,6 +250,15 @@ namespace mpedit {
         }
     }
 
+    void SessionManager::setPlayerConnectionType(int id, std::string const& type) {
+        for (auto& p : m_players) {
+            if (p.id == id) {
+                p.connectionType = type;
+                return;
+            }
+        }
+    }
+
     std::vector<PlayerInfo> const& SessionManager::getPlayers() const {
         return m_players;
     }
@@ -433,9 +445,14 @@ namespace mpedit {
 
             for (auto& p : m_players) {
                 if (p.id == msg.playerId) {
+                    bool changed = (p.iconStr != msg.iconStr || p.colorIndex != msg.colorIndex || p.name != msg.name);
                     p.name = msg.name;
                     p.colorIndex = msg.colorIndex;
                     p.iconStr = msg.iconStr;
+                    if (changed) {
+                        auto callbacks = m_onPlayerJoined;
+                        for (auto& [id, cb] : callbacks) cb(p);
+                    }
                     return;
                 }
             }
@@ -501,6 +518,7 @@ namespace mpedit {
         net.onError([this](std::string const& error) {
             auto role = m_role;
             auto callbacks = m_onError;
+            bool isDedicated = P2PManager::get().isDedicatedServer();
             leaveSession();
 
             for (auto& [id, cb] : callbacks) {
@@ -508,9 +526,18 @@ namespace mpedit {
             }
 
             if (role == Role::Client) {
-                geode::queueInMainThread([error]() {
+                geode::queueInMainThread([error, isDedicated]() {
                     if (auto* editor = LevelEditorLayer::get()) {
                         auto* director = cocos2d::CCDirector::sharedDirector();
+                        if (isDedicated && editor->m_level) {
+                            if (auto* glm = GameLevelManager::sharedState()) {
+                                glm->deleteLevel(editor->m_level);
+                            }
+                            auto* scene = LevelBrowserLayer::scene(GJSearchObject::create(SearchType::MyLevels));
+                            director->replaceScene(cocos2d::CCTransitionFade::create(0.5f, scene));
+                            geode::Notification::create(error, geode::NotificationIcon::Error)->show();
+                            return;
+                        }
                         if (auto* runningScene = director->getRunningScene()) {
                             std::function<EditorPauseLayer*(cocos2d::CCNode*)> findPauseLayer = [&](cocos2d::CCNode* parent) -> EditorPauseLayer* {
                                 if (!parent) return nullptr;
@@ -569,13 +596,19 @@ namespace mpedit {
             uint32_t rtt = nowMs - ts;
             this->setPlayerPing(0, static_cast<int>(rtt));
             this->setPlayerPing(this->m_localPlayerId, 0);
+
+            auto myConnType = P2PManager::get().getConnectionType(0);
+            this->setPlayerConnectionType(this->m_localPlayerId, myConnType);
             
-            P2PManager::get().send(proto::serializePingUpdate(static_cast<uint32_t>(rtt)), ChannelType::Unreliable);
+            P2PManager::get().send(proto::serializePingUpdate(static_cast<uint32_t>(rtt), myConnType), ChannelType::Unreliable);
         });
 
         net.on(proto::Opcode::PingUpdate, [this](int playerId, proto::Reader& reader) {
-            auto ping = proto::deserializePingUpdate(reader);
-            this->setPlayerPing(playerId, static_cast<int>(ping));
+            auto pingData = proto::deserializePingUpdate(reader);
+            this->setPlayerPing(playerId, static_cast<int>(pingData.ping));
+            if (!pingData.connectionType.empty()) {
+                this->setPlayerConnectionType(playerId, pingData.connectionType);
+            }
         });
 
         net.on(proto::Opcode::RoomInfo, [this](int playerId, proto::Reader& reader) {

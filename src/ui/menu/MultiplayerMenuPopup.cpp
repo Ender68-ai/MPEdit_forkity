@@ -18,11 +18,15 @@
 #include <Geode/binding/CCMenuItemToggler.hpp>
 #include <Geode/binding/SliderThumb.hpp>
 #include <Geode/binding/TextArea.hpp>
+#include <Geode/binding/GameLevelManager.hpp>
+#include <Geode/binding/LevelBrowserLayer.hpp>
+#include <Geode/binding/GJSearchObject.hpp>
 
 
 using namespace geode::prelude;
 
 namespace mpedit {
+    static inline std::unordered_set<std::string> s_knownDeadRooms;
 
 
     class JoinPasswordPopup : public BasePopup {
@@ -80,208 +84,8 @@ namespace mpedit {
     class PatreonPopup;
     static void showPatreonNoticeInternal();
 
-    static bool s_updatePopupOpen = false;
     static bool s_patreonPopupOpen = false;
-    static bool s_pendingPatreon = false;
-    static std::pair<std::string, std::string> s_pendingUpdate = {"", ""};
     static bool s_patreonShown = false;
-    static bool s_updateAvailable = false;
-    static std::string s_updateTagName = "";
-    static std::string s_updateDownloadUrl = "";
-
-    class UpdatePopup : public BasePopup {
-    protected:
-        std::string m_downloadUrl;
-        std::string m_latestVer;
-        bool m_isDownloaded = false;
-        geode::async::TaskHolder<geode::utils::web::WebResponse> m_downloadTask;
-        TextArea* m_textArea = nullptr;
-        CCMenuItemSpriteExtra* m_updateBtn = nullptr;
-        CCMenuItemSpriteExtra* m_laterBtn = nullptr;
-        CCMenuItemSpriteExtra* m_discordBtn = nullptr;
-        ButtonSprite* m_updateSpr = nullptr;
-
-        bool init(std::string const& latestVer, std::string const& downloadUrl) {
-            if (!BasePopup::init(360.f, 225.f)) return false;
-
-            m_latestVer = latestVer;
-            m_downloadUrl = downloadUrl;
-
-            this->setTitle("Update Available!");
-
-            std::string cleanCurrent;
-            auto currentVer = geode::Mod::get()->getVersion();
-            cleanCurrent = fmt::format("v{}.{}.{}", currentVer.getMajor(), currentVer.getMinor(), currentVer.getPatch());
-
-            std::string cleanLatest = latestVer;
-            if (auto latestVerRes = geode::VersionInfo::parse(latestVer)) {
-                auto v = latestVerRes.unwrap();
-                cleanLatest = fmt::format("v{}.{}.{}", v.getMajor(), v.getMinor(), v.getPatch());
-            } else {
-                if (auto dashPos = cleanLatest.find('-'); dashPos != std::string::npos) {
-                    cleanLatest = cleanLatest.substr(0, dashPos);
-                }
-                if (!cleanLatest.starts_with('v')) {
-                    cleanLatest = "v" + cleanLatest;
-                }
-            }
-
-            auto msg = fmt::format(
-                "A <cy>new version</c> of Multiplayer Edit is available!\n\n"
-                "Your version: <cg>{}</c>\n"
-                "Latest version: <cy>{}</c>\n\n"
-                "Consider joining our <cl>Discord server</c> to stay\n"
-                "updated and talk to the community!",
-                cleanCurrent, cleanLatest
-            );
-
-            m_textArea = TextArea::create(
-                msg,
-                "chatFont.fnt",
-                1.0f,
-                360.f,
-                ccp(0.5f, 0.5f),
-                21.f,
-                false
-            );
-            m_textArea->setScale(0.85f);
-            m_mainLayer->addChildAtPosition(m_textArea, Anchor::Center, ccp(0.f, 5.f));
-
-            auto btnMenu = CCMenu::create();
-            btnMenu->setContentSize({260.f, 35.f});
-            btnMenu->setPosition(this->fromBottom(25.f));
-            btnMenu->setAnchorPoint({0.5f, 0.5f});
-            btnMenu->setLayout(RowLayout::create()->setAxisAlignment(AxisAlignment::Center)->setGap(10.f));
-            m_mainLayer->addChild(btnMenu);
-
-            auto discordSpr = CCSprite::createWithSpriteFrameName("gj_discordIcon_001.png");
-            m_discordBtn = CCMenuItemSpriteExtra::create(discordSpr, this, menu_selector(UpdatePopup::onDiscord));
-            btnMenu->addChild(m_discordBtn);
-
-            auto laterSpr = ButtonSprite::create("Later", "goldFont.fnt", "GJ_button_06.png", 0.8f);
-            m_laterBtn = CCMenuItemSpriteExtra::create(laterSpr, this, menu_selector(UpdatePopup::onClose));
-            btnMenu->addChild(m_laterBtn);
-
-            m_updateSpr = ButtonSprite::create("Update", "goldFont.fnt", "GJ_button_01.png", 0.8f);
-            m_updateBtn = CCMenuItemSpriteExtra::create(m_updateSpr, this, menu_selector(UpdatePopup::onUpdate));
-            btnMenu->addChild(m_updateBtn);
-
-            btnMenu->updateLayout();
-
-            return true;
-        }
-
-        void onClose(CCObject* sender) override {
-            s_updatePopupOpen = false;
-            BasePopup::onClose(sender);
-
-            if (s_updateAvailable && MultiplayerMenuPopup::s_instance) {
-                MultiplayerMenuPopup::s_instance->showHeaderUpdateButton();
-            }
-
-            if (s_pendingPatreon) {
-                s_pendingPatreon = false;
-                showPatreonNoticeInternal();
-            }
-        }
-
-        void onDiscord(CCObject*) {
-            geode::utils::web::openLinkInBrowser("https://discord.gg/mdsuxYu2YP");
-        }
-
-        void onUpdate(CCObject*) {
-            if (m_isDownloaded) {
-                geode::utils::game::restart(true);
-                return;
-            }
-
-            if (m_downloadUrl.empty()) return;
-
-            m_updateBtn->setEnabled(false);
-            m_laterBtn->setEnabled(false);
-            m_discordBtn->setEnabled(false);
-            m_updateSpr->setString("Downloading...");
-
-            if (m_textArea) {
-                m_textArea->setString("Downloading update, please wait...\n\nDo not close the game.");
-            }
-
-            auto req = geode::utils::web::WebRequest();
-            req.header("User-Agent", "MultiplayerEdit-GeodeMod");
-            m_downloadTask.spawn(
-                req.get(m_downloadUrl),
-                [this](geode::utils::web::WebResponse res) {
-                    if (!res.ok()) {
-                        if (m_textArea) {
-                            m_textArea->setString("<cr>Failed to download update.</c>\n\nPlease check your internet connection\nor download manually from Discord.");
-                        }
-                        if (m_updateBtn) m_updateBtn->setEnabled(false);
-                        if (m_laterBtn) m_laterBtn->setEnabled(true);
-                        if (m_discordBtn) m_discordBtn->setEnabled(true);
-                        return;
-                    }
-
-                    auto data = std::move(res).data();
-                    auto targetPath = geode::Mod::get()->getPackagePath();
-                    if (targetPath.empty()) {
-                        targetPath = geode::dirs::getModsDir() / "d050.multiplayeredit.geode";
-                    }
-
-                    auto ok = geode::utils::file::writeBinary(targetPath, data);
-                    if (!ok) {
-                        if (m_textArea) {
-                            m_textArea->setString("<cr>Failed to save update file.</c>\n\nPlease check file permissions\nor download manually.");
-                        }
-                        if (m_laterBtn) m_laterBtn->setEnabled(true);
-                        if (m_discordBtn) m_discordBtn->setEnabled(true);
-                        return;
-                    }
-
-                    m_isDownloaded = true;
-                    s_updateAvailable = false;
-                    if (MultiplayerMenuPopup::s_instance) {
-                        MultiplayerMenuPopup::s_instance->hideHeaderUpdateButton();
-                    }
-                    this->setTitle("Update Complete!");
-
-                    if (m_textArea) {
-                        m_textArea->setString(fmt::format(
-                            "Multiplayer Edit has been updated to <cg>{}</c>!\n\n"
-                            "Restart Geometry Dash now to apply the update?",
-                            m_latestVer
-                        ));
-                    }
-
-                    if (m_discordBtn) m_discordBtn->setVisible(false);
-                    if (m_laterBtn) {
-                        m_laterBtn->setEnabled(true);
-                        m_laterBtn->setVisible(true);
-                    }
-                    if (m_updateBtn) {
-                        m_updateBtn->setEnabled(true);
-                        if (m_updateSpr) {
-                            m_updateSpr->setString("Restart");
-                        }
-                    }
-
-                    if (auto* menu = typeinfo_cast<CCMenu*>(m_updateBtn->getParent())) {
-                        menu->updateLayout();
-                    }
-                }
-            );
-        }
-
-    public:
-        static UpdatePopup* create(std::string const& latestVer, std::string const& downloadUrl) {
-            auto ret = new UpdatePopup();
-            if (ret->init(latestVer, downloadUrl)) {
-                ret->autorelease();
-                return ret;
-            }
-            delete ret;
-            return nullptr;
-        }
-    };
 
     class PatreonPopup : public BasePopup {
     protected:
@@ -365,17 +169,11 @@ namespace mpedit {
             s_patreonPopupOpen = false;
             BasePopup::onClose(sender);
 
-            if (!s_pendingUpdate.first.empty()) {
-                auto tag = s_pendingUpdate.first;
-                auto url = s_pendingUpdate.second;
-                s_pendingUpdate = {"", ""};
-                geode::queueInMainThread([tag, url]() {
-                    if (auto* popup = UpdatePopup::create(tag, url)) {
-                        s_updatePopupOpen = true;
-                        popup->show();
-                    }
-                });
+            if (MultiplayerMenuPopup::s_instance && !SessionManager::get().isInSession()) {
+                MultiplayerMenuPopup::s_instance->fetchRooms();
             }
+
+
         }
 
         void keyBackClicked() override {
@@ -409,11 +207,6 @@ namespace mpedit {
     static void showPatreonNoticeInternal() {
         if (s_patreonShown) return;
 
-        if (s_updatePopupOpen) {
-            s_pendingPatreon = true;
-            return;
-        }
-
         s_patreonShown = true;
         s_patreonPopupOpen = true;
         geode::queueInMainThread([]() {
@@ -422,119 +215,6 @@ namespace mpedit {
             }
         });
     }
-
-    static geode::async::TaskHolder<geode::utils::web::WebResponse> s_globalUpdateTask;
-    static bool s_hasCheckedForUpdates = false;
-
-    void MultiplayerMenuPopup::checkUpdatesAndPatreon() {
-        if (!s_hasCheckedForUpdates && geode::Mod::get()->getSettingValue<bool>("check-updates")) {
-            s_hasCheckedForUpdates = true;
-
-            std::thread([]() {
-                std::this_thread::sleep_for(std::chrono::milliseconds(1500));
-                geode::queueInMainThread([]() {
-                    if (!s_updatePopupOpen && !s_patreonShown) {
-                        showPatreonNoticeInternal();
-                    }
-                });
-            }).detach();
-
-            auto req = geode::utils::web::WebRequest();
-            req.header("User-Agent", "MultiplayerEdit-GeodeMod");
-            s_globalUpdateTask.spawn(
-                req.get("https://api.github.com/repos/xXoanon/MultiplayerEdit/releases?per_page=1"),
-                [](geode::utils::web::WebResponse res) {
-                    bool needsUpdate = false;
-                    std::string tagName;
-                    std::string downloadUrl;
-
-                    if (res.ok()) {
-                        auto json = res.json().unwrapOr(matjson::Value());
-                        if (json.isArray() && !json.asArray().unwrap().empty()) {
-                            auto release = json[0];
-                            tagName = release.get<std::string>("tag_name").unwrapOr("");
-                            if (!tagName.empty() && release.contains("assets") && release["assets"].isArray()) {
-                                for (auto const& asset : release["assets"].asArray().unwrap()) {
-                                    auto name = asset.get<std::string>("name").unwrapOr("");
-                                    if (name.ends_with(".geode")) {
-                                        downloadUrl = asset.get<std::string>("browser_download_url").unwrapOr("");
-                                        break;
-                                    }
-                                }
-                            }
-
-                            if (!downloadUrl.empty()) {
-                                auto currentVer = geode::Mod::get()->getVersion();
-
-                                auto stripSuffix = [](std::string const& str) -> std::string {
-                                    std::string s = str;
-                                    if (!s.empty() && (s[0] == 'v' || s[0] == 'V')) {
-                                        s = s.substr(1);
-                                    }
-                                    auto dashPos = s.find('-');
-                                    if (dashPos != std::string::npos) {
-                                        s = s.substr(0, dashPos);
-                                    }
-                                    auto plusPos = s.find('+');
-                                    if (plusPos != std::string::npos) {
-                                        s = s.substr(0, plusPos);
-                                    }
-                                    return s;
-                                };
-
-                                auto strippedLatest = stripSuffix(tagName);
-                                auto strippedCurrent = stripSuffix(currentVer.toNonVString());
-
-                                if (auto latestVerRes = geode::VersionInfo::parse(strippedLatest)) {
-                                    auto latestVer = latestVerRes.unwrap();
-                                    if (auto curVerRes = geode::VersionInfo::parse(strippedCurrent)) {
-                                        auto cur = curVerRes.unwrap();
-                                        if (latestVer.getMajor() != cur.getMajor() ||
-                                            latestVer.getMinor() != cur.getMinor() ||
-                                            latestVer.getPatch() != cur.getPatch()) {
-                                            needsUpdate = true;
-                                        }
-                                    } else {
-                                        if (latestVer.getMajor() != currentVer.getMajor() ||
-                                            latestVer.getMinor() != currentVer.getMinor() ||
-                                            latestVer.getPatch() != currentVer.getPatch()) {
-                                            needsUpdate = true;
-                                        }
-                                    }
-                                } else {
-                                    if (strippedLatest != strippedCurrent) {
-                                        needsUpdate = true;
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    if (needsUpdate) {
-                        s_updateAvailable = true;
-                        s_updateTagName = tagName;
-                        s_updateDownloadUrl = downloadUrl;
-                        s_pendingPatreon = true;
-                        if (s_patreonPopupOpen) {
-                            s_pendingUpdate = { tagName, downloadUrl };
-                        } else {
-                            geode::queueInMainThread([tagName, downloadUrl]() {
-                                if (auto* popup = UpdatePopup::create(tagName, downloadUrl)) {
-                                    s_updatePopupOpen = true;
-                                    popup->show();
-                                }
-                            });
-                        }
-                    } else {
-                        showPatreonNoticeInternal();
-                    }
-                }
-            );
-        } else {
-            showPatreonNoticeInternal();
-        }
-    }
-
 
     class RevertPlayerPopup : public BasePopup {
     protected:
@@ -1648,6 +1328,8 @@ namespace mpedit {
             icon->setSecondColor(col2);
             if (glowEnabled) {
                 icon->setGlowOutline(glowCol);
+            } else {
+                icon->disableGlowOutline();
             }
             icon->setScale(0.55f);
             icon->setPosition({15.f, 15.f});
@@ -1671,24 +1353,27 @@ namespace mpedit {
                 nextLabelX += viewOnlyLabel->getScaledContentSize().width + 10.f;
             }
             
+            auto pingLabel = CCLabelBMFont::create("", "chatFont.fnt");
+            pingLabel->setID("ping-label");
+            pingLabel->setAnchorPoint({0, 0.5f});
+            pingLabel->setScale(0.35f);
+            pingLabel->setPosition({nextLabelX, 15.f});
+            this->addChild(pingLabel);
+
             if (info.id != SessionManager::get().getLocalPlayerId()) {
-                auto pingLabel = CCLabelBMFont::create(fmt::format("{} ms", info.ping).c_str(), "chatFont.fnt");
-                pingLabel->setID("ping-label");
-                pingLabel->setAnchorPoint({0, 0.5f});
-                pingLabel->setScale(0.35f);
+                pingLabel->setString(fmt::format("{} ms", info.ping).c_str());
                 if (info.ping < 100) pingLabel->setColor({100, 255, 100});
                 else if (info.ping < 200) pingLabel->setColor({255, 255, 100});
                 else pingLabel->setColor({255, 100, 100});
-                pingLabel->setPosition({nextLabelX, 15.f});
-                this->addChild(pingLabel);
-
-                auto typeLabel = CCLabelBMFont::create("", "chatFont.fnt");
-                typeLabel->setID("type-label");
-                typeLabel->setAnchorPoint({0, 0.5f});
-                typeLabel->setScale(0.35f);
-                typeLabel->setPosition({pingLabel->getPositionX() + pingLabel->getScaledContentSize().width + 8.f, 15.f});
-                this->addChild(typeLabel);
+                nextLabelX += pingLabel->getScaledContentSize().width + 8.f;
             }
+
+            auto typeLabel = CCLabelBMFont::create("", "chatFont.fnt");
+            typeLabel->setID("type-label");
+            typeLabel->setAnchorPoint({0, 0.5f});
+            typeLabel->setScale(0.35f);
+            typeLabel->setPosition({nextLabelX, 15.f});
+            this->addChild(typeLabel);
             
             this->setID(fmt::format("player-cell-{}", info.id));
             
@@ -1809,11 +1494,7 @@ namespace mpedit {
             this->setupRoomBrowser();
         }
 
-        checkUpdatesAndPatreon();
-
-        if (s_updateAvailable) {
-            this->showHeaderUpdateButton();
-        }
+        showPatreon();
 
 
         auto* helper = UpdateHelperNode::create([](float dt) {
@@ -1855,6 +1536,9 @@ namespace mpedit {
                     fakeRoom.hasPassword = true;
                     this->promptPassword(fakeRoom);
                 } else {
+                    if (!m_lastJoinCode.empty()) {
+                        s_knownDeadRooms.insert(m_lastJoinCode);
+                    }
                     FLAlertLayer::create("Error", error, "OK")->show();
                 }
             });
@@ -1869,30 +1553,52 @@ namespace mpedit {
         if (!SessionManager::get().isInSession() || !m_scrollLayer) return;
         
         auto players = SessionManager::get().getPlayers();
+        int localId = SessionManager::get().getLocalPlayerId();
+        bool isHost = SessionManager::get().getRole() == SessionManager::Role::Host;
+
         for (auto const& p : players) {
-            if (p.id == SessionManager::get().getLocalPlayerId()) continue;
             auto cell = m_scrollLayer->m_contentLayer->getChildByID(fmt::format("player-cell-{}", p.id));
-            if (cell) {
-                auto pingLabel = typeinfo_cast<CCLabelBMFont*>(cell->getChildByID("ping-label"));
-                if (pingLabel) {
+            if (!cell) continue;
+
+            auto pingLabel = typeinfo_cast<CCLabelBMFont*>(cell->getChildByID("ping-label"));
+            if (pingLabel) {
+                if (p.id == localId) {
+                    pingLabel->setString("");
+                } else {
                     pingLabel->setString(fmt::format("{} ms", p.ping).c_str());
                     if (p.ping < 100) pingLabel->setColor({100, 255, 100});
                     else if (p.ping < 200) pingLabel->setColor({255, 255, 100});
                     else pingLabel->setColor({255, 100, 100});
                 }
-                if (auto typeLabel = typeinfo_cast<CCLabelBMFont*>(cell->getChildByID("type-label"))) {
-                    if (pingLabel) {
-                        typeLabel->setPositionX(pingLabel->getPositionX() + pingLabel->getScaledContentSize().width + 8.f);
+            }
+
+            if (auto typeLabel = typeinfo_cast<CCLabelBMFont*>(cell->getChildByID("type-label"))) {
+                if (pingLabel && pingLabel->getString() && strlen(pingLabel->getString()) > 0) {
+                    typeLabel->setPositionX(pingLabel->getPositionX() + pingLabel->getScaledContentSize().width + 8.f);
+                } else if (pingLabel) {
+                    typeLabel->setPositionX(pingLabel->getPositionX());
+                }
+
+                std::string type;
+                if (p.id == 0) {
+                    type = "Host";
+                } else if (p.id == localId) {
+                    type = isHost ? "Host" : P2PManager::get().getConnectionType(0);
+                } else {
+                    type = P2PManager::get().getConnectionType(p.id);
+                    if (type.empty()) {
+                        type = p.connectionType;
                     }
-                    auto type = P2PManager::get().getConnectionType(p.id);
-                    if (!type.empty()) {
-                        typeLabel->setString(fmt::format("[{}]", type).c_str());
-                        if (type == "STUN" || type == "LAN") typeLabel->setColor({100, 255, 100});
-                        else if (type == "TURN") typeLabel->setColor({255, 180, 100});
-                        else typeLabel->setColor({200, 200, 200});
-                    } else {
-                        typeLabel->setString("");
-                    }
+                }
+
+                if (!type.empty()) {
+                    typeLabel->setString(fmt::format("[{}]", type).c_str());
+                    if (type == "Host") typeLabel->setColor({255, 200, 80});
+                    else if (type == "STUN" || type == "LAN") typeLabel->setColor({100, 255, 100});
+                    else if (type == "TURN") typeLabel->setColor({255, 180, 100});
+                    else typeLabel->setColor({200, 200, 200});
+                } else {
+                    typeLabel->setString("");
                 }
             }
         }
@@ -1906,6 +1612,11 @@ namespace mpedit {
         }
         session.removeListener(this);
         if (s_instance == this) s_instance = nullptr;
+    }
+
+    void MultiplayerMenuPopup::onClose(cocos2d::CCObject* sender) {
+        if (s_instance == this) s_instance = nullptr;
+        BasePopup::onClose(sender);
     }
 
     void MultiplayerMenuPopup::setupMenus() {
@@ -2014,7 +1725,7 @@ namespace mpedit {
         }
 
         P2PManager::get().fetchRooms([safeThis](std::vector<P2PManager::RoomInfo> const& rooms) {
-            if (safeThis->getParent()) {
+            if (safeThis->getParent() || MultiplayerMenuPopup::s_instance == safeThis) {
                 safeThis->populateRooms(rooms);
                 if (rooms.empty() && safeThis->m_statusLabel) {
                     safeThis->m_statusLabel->setVisible(true);
@@ -2027,12 +1738,26 @@ namespace mpedit {
     void MultiplayerMenuPopup::populateRooms(std::vector<P2PManager::RoomInfo> const& rooms) {
         if (!m_scrollLayer) return;
         m_scrollLayer->m_contentLayer->removeAllChildren();
-        if (m_statusLabel) m_statusLabel->setVisible(rooms.empty());
 
-        float totalHeight = rooms.size() * 45.f;
+        std::vector<P2PManager::RoomInfo> activeRooms;
+        activeRooms.reserve(rooms.size());
+        for (auto const& r : rooms) {
+            if (s_knownDeadRooms.find(r.roomCode) == s_knownDeadRooms.end()) {
+                activeRooms.push_back(r);
+            }
+        }
+
+        if (m_statusLabel) {
+            m_statusLabel->setVisible(activeRooms.empty());
+            if (activeRooms.empty()) {
+                m_statusLabel->setString("No rooms found");
+            }
+        }
+
+        float totalHeight = activeRooms.size() * 45.f;
         m_scrollLayer->m_contentLayer->setContentHeight(std::max(m_scrollLayer->getContentSize().height, totalHeight));
 
-        for (auto const& r : rooms) {
+        for (auto const& r : activeRooms) {
             auto cell = RoomCell::create(r, this, m_scrollLayer->getContentSize().width);
             m_scrollLayer->m_contentLayer->addChild(cell);
         }
@@ -2042,8 +1767,8 @@ namespace mpedit {
     }
 
     void MultiplayerMenuPopup::onRefresh(CCObject*) {
+        s_knownDeadRooms.clear();
         if (m_scrollLayer) {
-            m_scrollLayer->m_contentLayer->removeAllChildren();
             if (m_statusLabel) {
                 m_statusLabel->setVisible(true);
                 m_statusLabel->setString("Fetching rooms...");
@@ -2327,6 +2052,7 @@ namespace mpedit {
     void MultiplayerMenuPopup::onLeave(CCObject*) {
         if (SessionManager::get().isInSession()) {
             bool isHost = SessionManager::get().getRole() == SessionManager::Role::Host;
+            bool isDedicated = P2PManager::get().isDedicatedServer();
             SessionManager::get().leaveSession();
             geode::Notification::create("Left session", geode::NotificationIcon::Info)->show();
 
@@ -2335,8 +2061,16 @@ namespace mpedit {
                 this->onClose(nullptr);
             } else {
                 this->onClose(nullptr);
-                if (LevelEditorLayer::get()) {
+                if (auto* editor = LevelEditorLayer::get()) {
                     auto* director = cocos2d::CCDirector::sharedDirector();
+                    if (isDedicated && editor->m_level) {
+                        if (auto* glm = GameLevelManager::sharedState()) {
+                            glm->deleteLevel(editor->m_level);
+                        }
+                        auto* scene = LevelBrowserLayer::scene(GJSearchObject::create(SearchType::MyLevels));
+                        director->replaceScene(cocos2d::CCTransitionFade::create(0.5f, scene));
+                        return;
+                    }
                     if (auto* runningScene = director->getRunningScene()) {
                         std::function<EditorPauseLayer*(cocos2d::CCNode*)> findPauseLayer = [&](cocos2d::CCNode* parent) -> EditorPauseLayer* {
                             if (!parent) return nullptr;
@@ -2378,57 +2112,13 @@ namespace mpedit {
         );
     }
 
-    void MultiplayerMenuPopup::showPatreonNoticeIfNeeded() {
+    void MultiplayerMenuPopup::showPatreon() {
         showPatreonNoticeInternal();
-    }
-
-    void MultiplayerMenuPopup::onUpdateCheckTimeout(float) {
-        if (!s_updatePopupOpen && !s_patreonShown) {
-            showPatreonNoticeIfNeeded();
-        }
     }
 
     void MultiplayerMenuPopup::onPatreon(CCObject*) {
         if (auto* popup = PatreonPopup::create()) {
             s_patreonPopupOpen = true;
-            popup->show();
-        }
-    }
-
-    void MultiplayerMenuPopup::showHeaderUpdateButton() {
-        if (!s_updateAvailable) return;
-        if (m_headerUpdateBtn) {
-            m_headerUpdateBtn->setVisible(true);
-            return;
-        }
-
-        auto* updateMenu = CCMenu::create();
-        updateMenu->setPosition({this->m_size.width / 2.f, this->top() - 34.f});
-        updateMenu->setID("header-update-menu"_spr);
-        this->m_mainLayer->addChild(updateMenu, 15);
-
-        auto* spr = ButtonSprite::create("Update", "goldFont.fnt", "GJ_button_01.png", 0.5f);
-        spr->setScale(0.55f);
-        auto* pulse = CCRepeatForever::create(CCSequence::create(
-            CCEaseInOut::create(CCScaleTo::create(0.7f, 0.62f), 2.0f),
-            CCEaseInOut::create(CCScaleTo::create(0.7f, 0.50f), 2.0f),
-            nullptr
-        ));
-        spr->runAction(pulse);
-
-        m_headerUpdateBtn = CCMenuItemSpriteExtra::create(spr, this, menu_selector(MultiplayerMenuPopup::onHeaderUpdate));
-        updateMenu->addChild(m_headerUpdateBtn);
-    }
-
-    void MultiplayerMenuPopup::hideHeaderUpdateButton() {
-        if (m_headerUpdateBtn) {
-            m_headerUpdateBtn->setVisible(false);
-        }
-    }
-
-    void MultiplayerMenuPopup::onHeaderUpdate(CCObject*) {
-        if (auto* popup = UpdatePopup::create(s_updateTagName, s_updateDownloadUrl)) {
-            s_updatePopupOpen = true;
             popup->show();
         }
     }
