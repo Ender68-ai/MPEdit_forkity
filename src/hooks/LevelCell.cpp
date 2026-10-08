@@ -12,7 +12,7 @@ class $modify(MPLevelCell, LevelCell) {
         auto* scene = CCDirector::sharedDirector()->getRunningScene();
 
         bool fromCollab = scene && scene->getChildByID(
-            "ender68.multiplayeredit/collab-layer"
+            "d050.multiplayeredit/collab-layer"
         ) != nullptr;
 
         if (fromCollab) {
@@ -46,7 +46,7 @@ class $modify(MPLevelCell, LevelCell) {
         auto scene = CCDirector::sharedDirector()->getRunningScene();
 
         bool isCollabScene =
-            scene->getChildByID("ender68.multiplayeredit/collab-layer") != nullptr;
+            scene->getChildByID("d050.multiplayeredit/collab-layer") != nullptr;
 
 
             if (!isCollabScene) {

@@ -43,17 +43,6 @@ namespace {
     };
 }
 
-namespace mpedit {
-    void updateStartPosCache(GameObject* obj) {
-        if (obj && obj->m_objectID == 31 && s_startPosObjects.count(obj)) {
-            if (auto* editor = LevelEditorLayer::get()) {
-                s_startPosSaveStrings[obj] = obj->getSaveString(editor);
-            }
-        }
-    }
-}
-
-
 class $modify(MPEditorPauseLayer, EditorPauseLayer) {
     bool init(LevelEditorLayer* editor) {
         if (!EditorPauseLayer::init(editor)) return false;
@@ -2090,32 +2079,6 @@ namespace {
 }
 }
 
-namespace mpedit {
-ActionSerializer::ColorChannelData colorActionToData(ColorAction* action, int channelID) {
-    ActionSerializer::ColorChannelData data;
-    data.channelID = channelID;
-    if (action) {
-        data.color = action->m_color;
-        data.fromColor = action->m_fromColor;
-        data.toColor = action->m_toColor;
-        data.duration = action->m_duration;
-        data.blending = action->m_blending;
-        data.playerColor = action->m_playerColor;
-        data.fromOpacity = action->m_fromOpacity;
-        data.toOpacity = action->m_toOpacity;
-        data.copyHSV = action->m_copyHSV;
-        data.copyID = action->m_copyID;
-        data.copyOpacity = action->m_copyOpacity;
-        data.copyColorCalculated = action->m_copyColorCalculated;
-        data.colorID = action->m_colorID;
-        data.copyColorLoop = action->m_copyColorLoop;
-        data.legacyHSV = action->m_legacyHSV;
-    }
-    return data;
-}
-}
-
-
 #include <Geode/modify/GJColorSetupLayer.hpp>
 class $modify(MPGJColorSetupLayer, GJColorSetupLayer) {
     struct Fields {
@@ -2421,13 +2384,3 @@ class $modify(MPColorSelectLiveOverlay, ColorSelectLiveOverlay) {
         }
     }
 };
-
-namespace mpedit {
-    void RemoteActionHandler::sendSnapshotToServer(std::function<void()> onComplete) {
-        if (auto* layer = LevelEditorLayer::get()) {
-            ::sendChunkedSync(layer, 0, onComplete);
-        } else if (onComplete) {
-            onComplete();
-        }
-    }
-}

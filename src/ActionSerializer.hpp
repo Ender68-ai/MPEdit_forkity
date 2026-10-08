@@ -4,6 +4,7 @@
 #include <vector>
 
 class GameObject;
+class ColorAction;
 
 namespace mpedit {
 
@@ -124,5 +125,7 @@ namespace mpedit {
         bool hasDeepPropertyChanges(GameObject* obj, std::string const& oldSave, std::string const& newSave);
 
     }
+
+    ActionSerializer::ColorChannelData colorActionToData(ColorAction* action, int channelID);
 
 }

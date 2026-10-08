@@ -204,16 +204,37 @@ namespace mpedit {
         }
     };
 
-    static void showPatreonNoticeInternal() {
-        if (s_patreonShown) return;
-
-        s_patreonShown = true;
+    static void showPatreonPopupInternal() {
         s_patreonPopupOpen = true;
         geode::queueInMainThread([]() {
             if (auto* popup = PatreonPopup::create()) {
                 popup->show();
+            } else {
+                s_patreonPopupOpen = false;
             }
         });
+    }
+
+    static void showPatreonNoticeInternal() {
+        if (s_patreonShown || s_patreonPopupOpen) return;
+        s_patreonShown = true;
+        showPatreonPopupInternal();
+    }
+
+    void MultiplayerMenuPopup::showPatreon() {
+        showPatreonNoticeInternal();
+    }
+
+    void MultiplayerMenuPopup::showPatreonNoticeIfNeeded() {
+        if (!s_patreonShown && !s_patreonPopupOpen) {
+            showPatreonNoticeInternal();
+        }
+    }
+
+    void MultiplayerMenuPopup::showPatreonPopup() {
+        if (s_patreonPopupOpen) return;
+        s_patreonShown = true;
+        showPatreonPopupInternal();
     }
 
     class RevertPlayerPopup : public BasePopup {
@@ -2112,15 +2133,8 @@ namespace mpedit {
         );
     }
 
-    void MultiplayerMenuPopup::showPatreon() {
-        showPatreonNoticeInternal();
-    }
-
     void MultiplayerMenuPopup::onPatreon(CCObject*) {
-        if (auto* popup = PatreonPopup::create()) {
-            s_patreonPopupOpen = true;
-            popup->show();
-        }
+        showPatreonPopup();
     }
 
     void MultiplayerMenuPopup::onCopyCode(CCObject*) {

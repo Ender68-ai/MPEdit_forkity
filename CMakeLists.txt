@@ -18,6 +18,7 @@ if(WIN32)
         WIN32_LEAN_AND_MEAN
         NOMINMAX
         _WINSOCKAPI_
+        _HAS_ITERATOR_DEBUGGING=0
     )
 endif()
 

@@ -1,6 +1,7 @@
 geode-main/
 
 build/
+build-release/
 build-win/
 cmake-build-*/
 .cache/
@@ -9,6 +10,7 @@ cmake-build-*/
 .idea/
 *.swp
 *.swo
+*.clinerules
 *~
 
 .DS_Store

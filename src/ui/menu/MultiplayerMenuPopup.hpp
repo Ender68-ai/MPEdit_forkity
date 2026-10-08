@@ -55,6 +55,7 @@ namespace mpedit {
     public:
         static inline MultiplayerMenuPopup* s_instance = nullptr;
         static MultiplayerMenuPopup* create();
+        static void showPatreon();
         static void showPatreonNoticeIfNeeded();
         static void showPatreonPopup();
         static void checkUpdatesAndPatreon();
@@ -62,6 +63,7 @@ namespace mpedit {
         void hideHeaderUpdateButton();
 
         void setupActiveSession();
+        void fetchRooms();
 
         void onJoinRoom(P2PManager::RoomInfo const& room);
         void promptPassword(P2PManager::RoomInfo const& room);
