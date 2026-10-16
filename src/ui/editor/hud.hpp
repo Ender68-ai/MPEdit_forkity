@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cocos2d.h>
-#include "../P2PManager.hpp"
+#include "P2PManager.hpp"
 
 namespace mpedit {
 

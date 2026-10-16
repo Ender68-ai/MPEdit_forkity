@@ -21,7 +21,6 @@
 #include "ui/menu/CreateRoomPopup.hpp"
 #include "ui/QuickChatPopup.hpp"
 
-#include "ui/SessionStatusNode.hpp"
 #include "ui/CursorNode.hpp"
 #include "ui/CursorOverlayNode.hpp"
 #include "ui/UpdateHelperNode.hpp"
@@ -660,10 +659,6 @@ class $modify(MPLevelEditorLayer, LevelEditorLayer) {
             helper->setID("network-update-helper"_spr);
             this->addChild(helper);
         }
-
-        auto* status = SessionStatusNode::create();
-        status->setID("session-status"_spr);
-        this->addChild(status, 1000);
 
         auto* cursorOverlay = CursorOverlayNode::create();
         cursorOverlay->setID("cursor-overlay-node"_spr);

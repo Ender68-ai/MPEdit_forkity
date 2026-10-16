@@ -1,8 +1,8 @@
 #include <Geode/modify/LevelBrowserLayer.hpp>
 #include <Geode/binding/LevelBrowserLayer.hpp>
 #include <Geode/Geode.hpp>
+#include <Geode/cocos/layers_scenes_transitions_nodes/CCTransition.h>
 
-#include "ui/ui.hpp"
 #include "ui/collablayer/CollabLayer.hpp"
 
 using namespace geode::prelude;
@@ -39,11 +39,7 @@ class $modify(MyLevelBrowserLayer, LevelBrowserLayer) {
         auto scene = CCScene::create();
         scene->addChild(collabLayer);
 
-        auto transition = Transition::create(
-            0.5f,
-            scene,
-            {0, 0, 0}
-        );
+        auto transition = CCTransitionFade::create(0.5f, scene);
 
         CCDirector::sharedDirector()->replaceScene(transition);
     }

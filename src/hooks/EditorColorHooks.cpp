@@ -19,7 +19,6 @@
 #include "ui/menu/CreateRoomPopup.hpp"
 #include "ui/QuickChatPopup.hpp"
 
-#include "ui/SessionStatusNode.hpp"
 #include "ui/CursorNode.hpp"
 #include "ui/CursorOverlayNode.hpp"
 #include "ui/UpdateHelperNode.hpp"
@@ -441,4 +440,3 @@ class $modify(MPColorSelectLiveOverlay, ColorSelectLiveOverlay) {
         }
     }
 };
-

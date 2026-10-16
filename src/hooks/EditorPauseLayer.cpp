@@ -1,7 +1,7 @@
 ﻿#include <Geode/Geode.hpp>
 #include <Geode/modify/EditorPauseLayer.hpp>
+#include <Geode/cocos/layers_scenes_transitions_nodes/CCTransition.h>
 
-#include "ui/ui.hpp"
 #include "ui/collablayer/CollabLayer.hpp"
 #include "SessionManager.hpp"
 #include "P2PManager.hpp"
@@ -161,7 +161,7 @@ class $modify(MPEditorPauseLayer, EditorPauseLayer) {
             auto collabLayer = CollabLayer::create();
             auto scene = CCScene::create();
             scene->addChild(collabLayer);
-            auto transition = Transition::create(0.5f, scene, {0, 0, 0});
+            auto transition = CCTransitionFade::create(0.5f, scene);
             CCDirector::sharedDirector()->replaceScene(transition);
         } else {
             EditorPauseLayer::onExitEditor(sender);

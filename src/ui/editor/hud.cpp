@@ -1,8 +1,8 @@
 #include <Geode/Geode.hpp>
 
-#include "SessionStatusNode.hpp"
-#include "../SessionManager.hpp"
-#include "../P2PManager.hpp"
+#include "hud.hpp"
+#include "SessionManager.hpp"
+#include "P2PManager.hpp"
 
 
 #include "ui/utils/Panel.hpp"
@@ -39,9 +39,8 @@ namespace mpedit {
         statusBg->setScaleY(0.3f);
         this->addChild(statusBg);
 
-        
-
-        this->scheduleUpdate();
+        this->update(0.f);
+        this->schedule(schedule_selector(SessionStatusNode::update), 0.25f);
 
         return true;
     }

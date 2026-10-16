@@ -1,12 +1,12 @@
 #include <Geode/Geode.hpp>
 #include <Geode/binding/LevelBrowserLayer.hpp>
 #include <Geode/modify/LevelCell.hpp>
+#include <Geode/cocos/layers_scenes_transitions_nodes/CCTransition.h>
 
 #include "settings/settings.hpp"
 #include "CollabLayer.hpp"
 #include "SessionManager.hpp"
 #include "ui/utils/Panel.hpp"
-#include "ui/ui.hpp"
 #include "ui/menu/MultiplayerMenuPopup.hpp"
 
 
@@ -277,7 +277,7 @@ void CollabLayer::onBack(CCObject* sender) {
         auto levelBrowserLayer = LevelBrowserLayer::create(GJSearchObject::create(SearchType::MyLevels));
         auto scene = CCScene::create();
         scene->addChild(levelBrowserLayer);
-        auto transition = Transition::create(0.5f, scene, {0, 0, 0});
+        auto transition = CCTransitionFade::create(0.5f, scene);
         CCDirector::sharedDirector()->replaceScene(transition);
     };
 
@@ -287,7 +287,7 @@ void CollabLayer::onSettings(CCObject*) {
     auto SettingsLayer = SettingsLayer::create();
     auto scene = CCScene::create();
     scene->addChild(SettingsLayer);
-    auto transition = Transition::create(0.5f, scene, {0, 0, 0});
+    auto transition = CCTransitionFade::create(0.5f, scene);
     CCDirector::sharedDirector()->pushScene(transition);
 };
 void CollabLayer::onDiscord(CCObject*) {
@@ -375,6 +375,5 @@ void CollabLayer::onJoinRoom(P2PManager::RoomInfo const& room, std::string const
         SessionManager::get().joinSession(room.roomCode, Mod::get()->getSettingValue<std::string>("player-name"), password);
     }
 }
-
 
 

@@ -1,12 +1,11 @@
 #include <Geode/Geode.hpp>
 #include <Geode/loader/Log.hpp>
+#include <Geode/loader/Loader.hpp>
 #include <alphalaneous.alphas_geode_utils/include/ObjectModify.hpp>
-#include <Geode/cocos/layers_scenes_transitions_nodes/CCTransition.h>
 #include <Geode/cocos/layers_scenes_transitions_nodes/CCTransition.h>
 
 #include <include/uibuilder/UIBuilder.hpp>
 #include <include/globed/GlobedMenuLayer.hpp>
-#include "ui/ui.hpp"
 #include "ui/collablayer/CollabLayer.hpp"
 
 using namespace cocos2d;
@@ -21,7 +20,7 @@ class $classModify(MyGlobedMenuLayer, globed::GlobedMenuLayer) {
         auto collabLayer = CollabLayer::create();
         auto scene = CCScene::create();
         scene->addChild(collabLayer);
-        auto transition = Transition::create(0.5f, scene, {0,0,0});
+        auto transition = CCTransitionFade::create(0.5f, scene);
         CCDirector::sharedDirector()->pushScene(transition);
     }
     void refreshButton(float) {
@@ -50,7 +49,7 @@ class $classModify(MyGlobedMenuLayer, globed::GlobedMenuLayer) {
     }
 
     void modify() {
-        if (UI::useGlobed()) {
+        if (geode::Loader::get()->isModLoaded("dankmeme.globed2")) {
             this->schedule(schedule_selector(MyGlobedMenuLayer::refreshButton), 0.5f);
         }
     }

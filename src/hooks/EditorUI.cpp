@@ -19,7 +19,7 @@
 #include "ui/menu/CreateRoomPopup.hpp"
 #include "ui/QuickChatPopup.hpp"
 
-#include "ui/SessionStatusNode.hpp"
+#include "ui/editor/hud.hpp"
 #include "ui/CursorNode.hpp"
 #include "ui/CursorOverlayNode.hpp"
 #include "ui/UpdateHelperNode.hpp"
@@ -727,6 +727,13 @@ class $modify(MPEditorUI, EditorUI) {
     bool init(LevelEditorLayer* editorLayer) {
         if (!EditorUI::init(editorLayer)) return false;
 
+        if (SessionManager::get().isInSession()) {
+            if (auto* status = SessionStatusNode::create()) {
+                status->setID("session-status"_spr);
+                this->addChild(status, 1000);
+            }
+        }
+
         auto* helper = UpdateHelperNode::create([this](float dt) {
             this->syncDeselections(dt);
         }, 0.1f);
@@ -995,4 +1002,3 @@ class $modify(MPEditorUI, EditorUI) {
         });
     }
 };
-

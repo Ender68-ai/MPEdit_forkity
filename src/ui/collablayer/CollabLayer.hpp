@@ -6,6 +6,8 @@
 #include "modes/HostMode.hpp"
 #include "modes/JoinMode.hpp"
 
+extern bool fromCollab;
+
 using namespace geode::prelude;
 using namespace mpedit;
 
@@ -59,4 +61,3 @@ public:
     CCMenuItemSpriteExtra* m_roomListButton = nullptr;
 
 };
-
