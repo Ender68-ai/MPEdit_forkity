@@ -20,6 +20,10 @@ jobs:
             os: macos-latest
             target: MacOS
 
+          - name: Linux
+            os: self-hosted
+            target: Linux
+
           - name: Android32
             os: ubuntu-latest
             target: Android32
@@ -33,18 +37,18 @@ jobs:
             target: iOS
 
     name: ${{ matrix.config.name }}
-    runs-on: ${{ matrix.config.os }}
+    runs-on: ${{ matrix.config.os == 'self-hosted' && fromJSON('["self-hosted", "linux", "x64"]') || matrix.config.os }}
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Build Mod
-      uses: geode-sdk/build-geode-mod@main
-      with:
-        sdk: v5.10.1
-        combine: true
-        target: ${{ matrix.config.target }}
-        configure-args: "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+      - name: Build Mod
+        uses: geode-sdk/build-geode-mod@main
+        with:
+          sdk: v5.10.1
+          combine: true
+          target: ${{ matrix.config.target }}
+          configure-args: "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
 
   package:
     name: Package Mod
@@ -52,16 +56,14 @@ jobs:
     needs: build
 
     steps:
-    - uses: geode-sdk/build-geode-mod/combine@main
-      id: build
-      with:
-        zstd: true
-        optimize-pngs: true
+      - uses: geode-sdk/build-geode-mod/combine@main
+        id: build
+        with:
+          zstd: true
+          optimize-pngs: true
 
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: MultiplayerEdit
-        path: ${{ steps.build.outputs.build-output }}
-
-
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MultiplayerEdit
+          path: ${{ steps.build.outputs.build-output }}

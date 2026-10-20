@@ -499,11 +499,6 @@ void RoomCreateLayer::onCopyRoomCode(CCObject*) {
 void RoomCreateLayer::onLeaveSession(CCObject*) {
     mpedit::SessionManager::get().leaveSession();
 
-    log::info(
-        "after leave: isInSession = {}",
-        mpedit::SessionManager::get().isInSession()
-    );
-
     auto winSize = CCDirector::sharedDirector()->getWinSize();
     m_createRoomLayer->animateResize( winSize.width * 0.8f, winSize.height * 0.7f, 0.5f);
 
@@ -517,8 +512,6 @@ void RoomCreateLayer::onLeaveSession(CCObject*) {
     m_roomCodeLabel->setVisible(false);
     m_codeButtonMenu->setVisible(false);
     m_scrollLayer->setVisible(false);
-
-
 }
 
 

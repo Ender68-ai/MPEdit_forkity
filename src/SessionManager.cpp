@@ -154,11 +154,16 @@ namespace mpedit {
     void SessionManager::leaveSession() {
         if (!isInSession()) return;
 
+        // 1. Stop all networking first
         P2PManager::get().leaveSession();
         
+        // 2. Store callbacks before clearing state
         auto sessionEndedCallbacks = m_onSessionEnded;
+        
+        // 3. Clear network handlers and remote action handlers
         clearNetworkHandlers();
 
+        // 4. Reset all session state
         m_role = Role::None;
         m_roomCode.clear();
         m_localPlayerId = -1;
@@ -168,9 +173,15 @@ namespace mpedit {
         m_chatHistory.clear();
         RevertManager::get().clear();
 
+        // 5. Execute session ended callbacks (UI cleanup)
         for (auto& [id, cb] : sessionEndedCallbacks) {
             cb();
         }
+
+        // 6. Notify user
+        geode::queueInMainThread([]() {
+            geode::Notification::create("Left session", geode::NotificationIcon::Info)->show();
+        });
 
         log::info("SessionManager: Left session");
     }

@@ -5,16 +5,28 @@
 
 using namespace geode::prelude;
 
+// Forward declaration
+class HostLocalLevelList;
+
 class HostMode : public CCNode {
+    friend class HostLocalLevelList;
+
     protected:
         bool init();
         void showListAfterDelay(float);
 
-        GJListLayer* m_listLayer = nullptr;
-
     public:
         ~HostMode();
         static HostMode* create();
+        static HostMode* get();
+        
+        void onLevelSelected(GJGameLevel* level);
+        void showLoadingOverlay(const char* message);
+        void hideLoadingOverlay();
+
+        GJListLayer* m_listLayer = nullptr;
+        CCNode* m_loadingOverlay = nullptr;
+        CCLabelBMFont* m_loadingLabel = nullptr;
 };
 
 
@@ -41,4 +53,3 @@ public:
     
 
 };
-
