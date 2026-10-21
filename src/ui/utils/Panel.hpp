@@ -15,12 +15,14 @@ public:
         CCSize size
     );
 
+    void setPanelSize(CCSize size);
+
     CCNode* getContent() {
         return m_content;
     }
 
 private:
-    CCScale9Sprite* m_background;
-    CCLabelBMFont* m_title;
-    CCNode* m_content;
+    CCScale9Sprite* m_background = nullptr;
+    CCLabelBMFont* m_title = nullptr;
+    CCNode* m_content = nullptr;
 };

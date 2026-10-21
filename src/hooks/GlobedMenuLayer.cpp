@@ -17,35 +17,60 @@ class $classModify(MyGlobedMenuLayer, globed::GlobedMenuLayer) {
     };
 
     void onGlobedButton(CCObject*) {
-        auto collabLayer = CollabLayer::create();
-        auto scene = CCScene::create();
+        auto* collabLayer = CollabLayer::create();
+        if (!collabLayer) {
+            geode::log::error("Globed integration: Failed to create MPEdit layer");
+            geode::Notification::create("Could not open MPEdit.", geode::NotificationIcon::Error)->show();
+            return;
+        }
+
+        auto* scene = CCScene::create();
+        if (!scene) {
+            geode::log::error("Globed integration: Failed to create MPEdit scene");
+            geode::Notification::create("Could not open MPEdit.", geode::NotificationIcon::Error)->show();
+            return;
+        }
         scene->addChild(collabLayer);
-        auto transition = CCTransitionFade::create(0.5f, scene);
+        auto* transition = CCTransitionFade::create(0.5f, scene);
+        if (!transition) {
+            geode::log::error("Globed integration: Failed to create scene transition");
+            geode::Notification::create("Could not open MPEdit.", geode::NotificationIcon::Error)->show();
+            return;
+        }
         CCDirector::sharedDirector()->pushScene(transition);
     }
+
     void refreshButton(float) {
-    auto menu = dynamic_cast<CCMenu*>(this->getChildByID("far-left-menu"));
-    if (!menu)
-        return;
+        auto menu = dynamic_cast<CCMenu*>(this->getChildByID("far-left-menu"));
+        if (!menu)
+            return;
 
-    if (menu->getChildByID("collab-button"))
-        return;
+        if (menu->getChildByID("collab-button"))
+            return;
 
-    auto spr = CCSprite::create("button2.png"_spr);
+        auto spr = CCSprite::create("button2.png"_spr);
+        if (!spr) {
+            geode::log::error("Globed integration: Failed to create MPEdit button sprite");
+            return;
+        }
 
-    auto btn = CCMenuItemSpriteExtra::create(
-        spr,
-        this,
-        menu_selector(MyGlobedMenuLayer::onGlobedButton)
-    );
+        auto btn = CCMenuItemSpriteExtra::create(
+            spr,
+            this,
+            menu_selector(MyGlobedMenuLayer::onGlobedButton)
+        );
+        if (!btn) {
+            geode::log::error("Globed integration: Failed to create MPEdit menu item");
+            return;
+        }
 
-    btn->setID("collab-button");
-    btn->setScale(0.4f);
+        btn->setID("collab-button");
+        btn->setScale(0.4f);
 
-    menu->addChild(btn);
-    menu->updateLayout();
+        menu->addChild(btn);
+        menu->updateLayout();
 
-    geode::log::info("Re-added button");
+        geode::log::info("Added MPEdit button to Globed menu");
     }
 
     void modify() {

@@ -50,6 +50,7 @@ protected:
     std::string m_currentPassword;
     std::string m_currentRoomCode;
     std::function<void()> m_onRoomCreated;
+    bool m_isCreating = false;
 
 public:
     ~RoomCreateLayer();

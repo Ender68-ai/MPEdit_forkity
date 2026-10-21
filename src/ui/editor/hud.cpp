@@ -4,6 +4,7 @@
 #include "SessionManager.hpp"
 #include "P2PManager.hpp"
 
+#include <algorithm>
 
 #include "ui/utils/Panel.hpp"
 
@@ -13,7 +14,7 @@ namespace mpedit {
 
     SessionStatusNode* SessionStatusNode::create() {
         auto* ret = new SessionStatusNode();
-        if (ret->init()) {
+        if (ret && ret->init()) {
             ret->autorelease();
             return ret;
         }
@@ -29,15 +30,22 @@ namespace mpedit {
         this->setPosition({0, 0});
         this->setAnchorPoint({0, 0});
 
-        m_statusText = CCLabelBMFont::create("", "goldFont.fnt");
-        m_statusText->setScale(0.4f);
-        m_statusText->setPosition({winSize.width * 0.37f, winSize.height * 0.96f});
-        this->addChild(m_statusText);
+        auto statusPosition = CCPoint{winSize.width * 0.37f, winSize.height * 0.96f};
+        m_statusBackground = Panel::create(nullptr, {160.f, 34.f});
+        if (!m_statusBackground) {
+            return false;
+        }
+        m_statusBackground->setPosition(statusPosition);
+        this->addChild(m_statusBackground, 0);
 
-        auto statusBg = Panel::create("", {winSize.width * 0.08f, winSize.height * 0.01f});
-        statusBg->setPosition({winSize.width * 0.37f, winSize.height * 0.96f});
-        statusBg->setScaleY(0.3f);
-        this->addChild(statusBg);
+        m_statusText = CCLabelBMFont::create("", "goldFont.fnt");
+        if (!m_statusText) {
+            log::error("SessionStatusNode: Failed to create status label");
+            return false;
+        }
+        m_statusText->setScale(0.4f);
+        m_statusText->setPosition({0.f, 0.f});
+        m_statusBackground->getContent()->addChild(m_statusText);
 
         this->update(0.f);
         this->schedule(schedule_selector(SessionStatusNode::update), 0.25f);
@@ -70,24 +78,27 @@ namespace mpedit {
         m_cachedError = errStr;
 
         if (!inSession) {
-            m_statusText->setString("");
+            setVisible(false);
             return;
         }
 
+        setVisible(true);
+
         std::string statusText;
-        ccColor3B color;
+        ccColor3B color{255, 255, 255};
 
         switch (state) {
             case P2PManager::State::Connected:
-                statusText = fmt::format(
-                    "Connected"
-                );
-                color = { 255, 255, 255};
+                statusText = "Connected";
                 break;
 
             case P2PManager::State::Connecting:
-            case P2PManager::State::Reconnecting:
                 statusText = "Connecting...";
+                color = {255, 255, 100};
+                break;
+
+            case P2PManager::State::Reconnecting:
+                statusText = "Reconnecting...";
                 color = {255, 255, 100};
                 break;
 
@@ -97,13 +108,50 @@ namespace mpedit {
                 break;
 
             case P2PManager::State::Error:
-                statusText = fmt::format("Error - {}", errStr);
+                statusText = "Error";
                 color = {255, 100, 100};
+                break;
+
+            default:
+                statusText = "Unknown";
+                color = {255, 255, 255};
                 break;
         }
 
+        if (state == P2PManager::State::Error && !errStr.empty()) {
+            constexpr size_t maxErrorLength = 36;
+            statusText += fmt::format(": {}", errStr.substr(0, maxErrorLength));
+            if (errStr.size() > maxErrorLength) {
+                statusText += "...";
+            }
+        }
+        if (!roomCode.empty()) {
+            statusText += fmt::format(" | Room {}", roomCode);
+        }
+        statusText += fmt::format(" | Players {}", playerCount);
+
         m_statusText->setString(statusText.c_str());
         m_statusText->setColor(color);
+
+        auto winSize = CCDirector::sharedDirector()->getWinSize();
+        auto availableWidth = 2.f * std::min(
+            m_statusBackground->getPositionX(),
+            winSize.width - m_statusBackground->getPositionX()
+        ) - 16.f;
+        auto maxWidth = std::max(0.f, availableWidth);
+        auto unscaledTextWidth = m_statusText->getContentSize().width;
+        if (unscaledTextWidth > 0.f) {
+            m_statusText->setScale(std::min(
+                0.4f,
+                std::max(0.f, maxWidth - 24.f) / unscaledTextWidth
+            ));
+        }
+        auto textWidth = unscaledTextWidth * m_statusText->getScale();
+        auto panelWidth = std::min(
+            std::max(160.f, textWidth + 24.f),
+            maxWidth
+        );
+        m_statusBackground->setPanelSize({panelWidth, 34.f});
     }
 
 }

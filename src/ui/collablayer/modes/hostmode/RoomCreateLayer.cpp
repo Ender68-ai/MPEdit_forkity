@@ -276,13 +276,15 @@ bool RoomCreateLayer::init() {
     
     mpedit::SessionManager::get().onPlayerJoined(this, [this](mpedit::PlayerInfo const&) {
         if (this->m_scrollLayer) {
-            this->refreshPlayerList();
+            this->unschedule(schedule_selector(RoomCreateLayer::showPlayerListDelayed));
+            this->scheduleOnce(schedule_selector(RoomCreateLayer::showPlayerListDelayed), 0.01f);
         }
     });
 
     mpedit::SessionManager::get().onPlayerLeft(this, [this](mpedit::PlayerInfo const&) {
         if (this->m_scrollLayer) {
-            this->refreshPlayerList();
+            this->unschedule(schedule_selector(RoomCreateLayer::showPlayerListDelayed));
+            this->scheduleOnce(schedule_selector(RoomCreateLayer::showPlayerListDelayed), 0.01f);
         }
     });
 
@@ -294,6 +296,19 @@ bool RoomCreateLayer::init() {
         mpedit::SessionManager::get().getRoomCode(),
         mpedit::SessionManager::get().getLocalPlayerId()
     );
+    });
+
+    mpedit::SessionManager::get().onError(this, [this](std::string const&) {
+        if (!m_isCreating) {
+            return;
+        }
+        m_isCreating = false;
+        if (m_boxTitle) {
+            m_boxTitle->setString("Create A Room");
+        }
+        if (m_createMenu) {
+            m_createMenu->setVisible(true);
+        }
     });
 
     if (session.isInSession()) {
@@ -316,19 +331,20 @@ void RoomCreateLayer::refreshPlayerList() {
     auto const& players = mpedit::SessionManager::get().getPlayers();
     
     if (players.empty()) {
-        m_scrollLayer->m_contentLayer->setContentHeight(std::max(m_scrollLayer->getContentSize().height, 10.f));
+        m_scrollLayer->m_contentLayer->setContentHeight(
+            std::max(m_scrollLayer->getContentSize().height, 30.f)
+        );
+        auto emptyLabel = CCLabelBMFont::create("No players connected", "goldFont.fnt");
+        if (emptyLabel) {
+            emptyLabel->setPosition(m_scrollLayer->m_contentLayer->getContentSize() / 2.f);
+            emptyLabel->setScale(0.45f);
+            m_scrollLayer->m_contentLayer->addChild(emptyLabel);
+        } else {
+            log::warn("RoomCreateLayer: Failed to create empty player-list label");
+        }
         m_scrollLayer->m_contentLayer->updateLayout();
         return;
     }
-
-    static const std::array<ccColor3B, 6> playerColors = {
-        ccColor3B{100, 200, 255},
-        ccColor3B{255, 120, 100},
-        ccColor3B{100, 255, 150},
-        ccColor3B{255, 200, 100},
-        ccColor3B{200, 150, 255},
-        ccColor3B{255, 150, 200},
-    };
 
     for (auto const& player : players) {
         auto row = CCNode::create();
@@ -350,13 +366,40 @@ void RoomCreateLayer::refreshPlayerList() {
         row->addChild(icon, 1);
 
         // Player name
-        auto nameColor = playerColors[player.colorIndex % playerColors.size()];
-        auto name = CCLabelBMFont::create(player.name.c_str(), "goldFont.fnt");
-        name->setAnchorPoint({0, 0.5f});
-        name->setPosition({35.f, 15.f});
-        name->setScale(0.4f);
-        name->setColor(nameColor);
-        row->addChild(name, 1);
+        auto displayName = player.name.empty()
+            ? fmt::format("Player {}", player.id)
+            : player.name;
+        auto duplicateNameCount = std::count_if(
+            players.begin(),
+            players.end(),
+            [&player](mpedit::PlayerInfo const& candidate) {
+                return !player.name.empty() && candidate.name == player.name;
+            }
+        );
+        if (duplicateNameCount > 1) {
+            displayName += fmt::format(" (#{})", player.id);
+        }
+        if (player.id == mpedit::SessionManager::get().getLocalPlayerId()) {
+            displayName += " (You)";
+        }
+        if (player.id == 0) {
+            displayName += " (Host)";
+        }
+        if (player.isViewOnly) {
+            displayName += " (View-only)";
+        }
+
+        auto name = CCLabelBMFont::create(displayName.c_str(), "goldFont.fnt");
+        if (name) {
+            name->setAnchorPoint({0, 0.5f});
+            name->setPosition({35.f, 15.f});
+            name->setScale(0.4f);
+            name->limitLabelWidth(row->getContentSize().width - 50.f, 0.4f, 0.18f);
+            name->setColor(getPlayerEffectiveColor(player.colorIndex, player.iconStr));
+            row->addChild(name, 1);
+        } else {
+            log::warn("RoomCreateLayer: Failed to create player name label");
+        }
 
         m_scrollLayer->m_contentLayer->addChild(row);
     }
@@ -370,6 +413,11 @@ void RoomCreateLayer::refreshPlayerList() {
 }
 
 void RoomCreateLayer::onCreate(CCObject*) {
+    auto& session = mpedit::SessionManager::get();
+    if (m_isCreating || session.isInSession()) {
+        return;
+    }
+
     mpedit::RoomSettings settings;
     settings.roomName = m_nameInput->getString();
     if (settings.roomName.empty())
@@ -386,7 +434,10 @@ void RoomCreateLayer::onCreate(CCObject*) {
     settings.password = m_passInput->getString();
     settings.isPrivate = m_privateToggle->isToggled();
     settings.defaultViewOnly = m_viewOnlyToggle->isToggled();
-    mpedit::SessionManager::get().hostSession(
+    m_isCreating = true;
+    m_boxTitle->setString("Creating room...");
+    m_createMenu->setVisible(false);
+    session.hostSession(
         Mod::get()->getSettingValue<std::string>("player-name"),
         settings
     );
@@ -396,6 +447,7 @@ void RoomCreateLayer::onSessionStarted(std::string const& roomCode, int playerId
     if (!m_createRoomLayer || !m_boxTitle || !m_layoutNode || !m_createMenu || !m_hostingTitle) {
         return;
     }
+    m_isCreating = false;
     log::info("ROOM CREATE UI RECEIVED SESSION START");
 
     auto winSize = CCDirector::sharedDirector()->getWinSize();
@@ -513,6 +565,3 @@ void RoomCreateLayer::onLeaveSession(CCObject*) {
     m_codeButtonMenu->setVisible(false);
     m_scrollLayer->setVisible(false);
 }
-
-
-
